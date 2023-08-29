@@ -9,6 +9,7 @@ lexer
 grading/**
 *.pl
 *.output
+*.s
 semant
 cgen
 parser
