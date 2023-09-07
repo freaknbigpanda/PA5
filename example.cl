@@ -3,7 +3,11 @@
     as possible.
  *)
 
-class Main {
+class Main inherits IO {
   main():Int { 0 };
+};
+
+class Hello {
+
 };
 

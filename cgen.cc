@@ -399,11 +399,7 @@ void StringEntry::code_def(ostream& s, int stringclasstag)
   code_ref(s);  s  << LABEL                                             // label
       << WORD << stringclasstag << endl                                 // tag
       << WORD << (DEFAULT_OBJFIELDS + STRING_SLOTS + (len+4)/4) << endl // size
-      << WORD;
-
-
- /***** Add dispatch information for class String ******/
-
+      << WORD << "String" << DISPATCH;
       s << endl;                                              // dispatch table
       s << WORD;  lensym->code_ref(s);  s << endl;            // string length
   emit_string_constant(s,str);                                // ascii string
@@ -442,10 +438,7 @@ void IntEntry::code_def(ostream &s, int intclasstag)
   code_ref(s);  s << LABEL                                // label
       << WORD << intclasstag << endl                      // class tag
       << WORD << (DEFAULT_OBJFIELDS + INT_SLOTS) << endl  // object size
-      << WORD; 
-
- /***** Add dispatch information for class Int ******/
-
+      << WORD << "Int" << DISPATCH;
       s << endl;                                          // dispatch table
       s << WORD << str << endl;                           // integer value
 }
@@ -486,10 +479,7 @@ void BoolConst::code_def(ostream& s, int boolclasstag)
   code_ref(s);  s << LABEL                                  // label
       << WORD << boolclasstag << endl                       // class tag
       << WORD << (DEFAULT_OBJFIELDS + BOOL_SLOTS) << endl   // object size
-      << WORD;
-
- /***** Add dispatch information for class Bool ******/
-
+      << WORD << "Bool" << DISPATCH;
       s << endl;                                            // dispatch table
       s << WORD << val << endl;                             // value (0 or 1)
 }
@@ -514,6 +504,7 @@ void CgenClassTable::code_global_data()
   Symbol integer = idtable.lookup_string(INTNAME);
   Symbol boolc   = idtable.lookup_string(BOOLNAME);
 
+  //todo: I really don't understand why we want to use ALIGN here, just don't get it really
   str << "\t.data\n" << ALIGN;
   //
   // The following global names must be defined first.
@@ -617,20 +608,34 @@ void CgenClassTable::code_constants()
 }
 
 
+
 CgenClassTable::CgenClassTable(Classes classes, ostream& s) : nds(NULL) , str(s)
 {
-   stringclasstag = 0 /* Change to your String class tag here */;
-   intclasstag =    0 /* Change to your Int class tag here */;
-   boolclasstag =   0 /* Change to your Bool class tag here */;
+  stringclasstag = 0 /* Change to your String class tag here */;
+  intclasstag =    1 /* Change to your Int class tag here */;
+  boolclasstag =   2 /* Change to your Bool class tag here */;
+  nonbasicclasstag = 3;
 
-   enterscope();
-   if (cgen_debug) cout << "Building CgenClassTable" << endl;
-   install_basic_classes();
-   install_classes(classes);
-   build_inheritance_tree();
+  enterscope();
+  if (cgen_debug) cout << "Building CgenClassTable" << endl;
+  install_basic_classes();
+  install_classes(classes);
+  build_inheritance_tree();
 
-   code();
-   exitscope();
+  code();
+  exitscope();
+}
+
+void CgenClassTable::code_prototype_objects()
+{
+  for(List<CgenNode> *l = nds; l; l = l->tl())
+  {
+    emit_protobj_ref(l->hd()->get_name(), str);
+    str << ":" << endl;
+    str << WORD << l->hd()->get_tag() << endl;
+    str << WORD << l->hd()->get_size() << endl;
+    str << WORD << l->hd()->get_name() << DISPTAB_SUFFIX << endl;
+  }
 }
 
 void CgenClassTable::install_basic_classes()
@@ -787,7 +792,9 @@ void CgenClassTable::install_classes(Classes cs)
 void CgenClassTable::build_inheritance_tree()
 {
   for(List<CgenNode> *l = nds; l; l = l->tl())
+  {
       set_relations(l->hd());
+  }
 }
 
 //
@@ -828,11 +835,18 @@ void CgenClassTable::code()
   if (cgen_debug) cout << "coding constants" << endl;
   code_constants();
 
+  if (cgen_debug) cout << "coding prototype objects" << endl;
+  code_prototype_objects();
+
 //                 Add your code to emit
-//                   - prototype objects
 //                   - class_nameTab
 //                   - dispatch tables
 //
+
+  if (cgen_debug) cout << "coding class_nameTab" << endl;
+
+  str << CLASSNAMETAB << endl;
+  
 
   if (cgen_debug) cout << "coding global text" << endl;
   code_global_text();
@@ -864,6 +878,16 @@ CgenNode::CgenNode(Class_ nd, Basicness bstatus, CgenClassTableP ct) :
    basic_status(bstatus)
 { 
    stringtable.add_string(name->get_string());          // Add class name to string table
+
+   Features features = get_features();
+   size = 3; // the most basic object is at least 3 words large for the class tag, size, and dispatch table ptr
+   for(int i = features->first(); features->more(i); i = features->next(i))
+   {
+      Feature feature = features->nth(i);
+      if (feature->is_attr()) size++;
+   }
+
+   tag = ct->get_next_class_tag();
 }
 
 

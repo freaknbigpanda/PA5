@@ -30,8 +30,8 @@
 #define DISPTAB_SUFFIX       "_dispTab"
 #define METHOD_SEP           "."
 #define CLASSINIT_SUFFIX     "_init"
-#define PROTOBJ_SUFFIX       "_protObj"
-#define OBJECTPROTOBJ        "Object"PROTOBJ_SUFFIX
+#define PROTOBJ_SUFFIX       "_protoObj"
+#define OBJECTPROTOBJ        "Object_protObj"
 #define INTCONST_PREFIX      "int_const"
 #define STRCONST_PREFIX      "str_const"
 #define BOOLCONST_PREFIX     "bool_const"
@@ -57,9 +57,10 @@
 #define INT_SLOTS         1
 #define BOOL_SLOTS        1
 
-#define GLOBAL        "\t.globl\t"
-#define ALIGN         "\t.align\t2\n"
-#define WORD          "\t.word\t"
+#define GLOBAL              "\t.globl\t"
+#define ALIGN               "\t.align\t2\n"
+#define WORD                "\t.word\t"
+#define DISPATCH            "_dispTab"
 
 //
 // register names
@@ -80,7 +81,7 @@
 //
 #define JALR  "\tjalr\t"  
 #define JAL   "\tjal\t"                 
-#define RET   "\tjr\t"RA"\t"
+#define RET   "\tjr\t$ra\t"
 
 #define SW    "\tsw\t"
 #define LW    "\tlw\t"
