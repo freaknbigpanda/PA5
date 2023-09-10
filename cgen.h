@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <stdio.h>
+#include <map>
 #include "emit.h"
 #include "cool-tree.h"
 #include "symtab.h"
@@ -13,15 +14,17 @@ typedef CgenClassTable *CgenClassTableP;
 
 class CgenNode;
 typedef CgenNode *CgenNodeP;
+using CgenNodeMap = std::map<int, CgenNodeP>;
 
 class CgenClassTable : public SymbolTable<Symbol,CgenNode> {
 private:
-   List<CgenNode> *nds;
+   List<CgenNode> *code_gen_classes;
    ostream& str;
    int stringclasstag;
    int intclasstag;
    int boolclasstag;
    int nonbasicclasstag;
+   CgenNodeMap cgen_nodes_for_class;
 
 // The following methods emit code for
 // constants and global declarations.
@@ -32,11 +35,14 @@ private:
    void code_select_gc();
    void code_constants();
    void code_prototype_objects();
+   void code_class_names();
+   void code_obj_table();
+   void code_dispatch_table();
 
-// The following creates an inheritance graph from
-// a list of classes.  The graph is implemented as
-// a tree of `CgenNode', and class names are placed
-// in the base class symbol table.
+   // The following creates an inheritance graph from
+   // a list of classes.  The graph is implemented as
+   // a tree of `CgenNode', and class names are placed
+   // in the base class symbol table.
 
    void install_basic_classes();
    void install_class(CgenNodeP nd);
@@ -47,6 +53,8 @@ public:
    CgenClassTable(Classes, ostream& str);
    void code();
    int get_next_class_tag() { return nonbasicclasstag++; }
+   CgenNodeP get_class_with_tag(int tag) const;
+   CgenNodeMap get_cgen_node_map() const { return cgen_nodes_for_class; }
    CgenNodeP root();
 };
 
@@ -57,8 +65,9 @@ private:
    List<CgenNode> *children;                  // Children of class
    Basicness basic_status;                    // `Basic' if class is basic
                                               // `NotBasic' otherwise
-   int tag;
-   int size;
+   int tag = -1;
+   int size = -1;
+   StringEntryP string_entry = nullptr;
 
 public:
    CgenNode(Class_ c,
@@ -72,6 +81,8 @@ public:
    int basic() { return (basic_status == Basic); }
    int get_size() { return size; }
    int get_tag() { return tag; }
+   StringEntryP get_string_entry() { return string_entry; }
+   void calculate_size();
 };
 
 class BoolConst 

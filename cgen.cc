@@ -24,6 +24,7 @@
 
 #include "cgen.h"
 #include "cgen_gc.h"
+#include <vector>
 
 extern void emit_string_constant(ostream& str, char *s);
 extern int cgen_debug;
@@ -609,7 +610,7 @@ void CgenClassTable::code_constants()
 
 
 
-CgenClassTable::CgenClassTable(Classes classes, ostream& s) : nds(NULL) , str(s)
+CgenClassTable::CgenClassTable(Classes classes, ostream& s) : code_gen_classes(NULL) , str(s)
 {
   stringclasstag = 0 /* Change to your String class tag here */;
   intclasstag =    1 /* Change to your Int class tag here */;
@@ -628,13 +629,104 @@ CgenClassTable::CgenClassTable(Classes classes, ostream& s) : nds(NULL) , str(s)
 
 void CgenClassTable::code_prototype_objects()
 {
-  for(List<CgenNode> *l = nds; l; l = l->tl())
+  for(auto it = cgen_nodes_for_class.cbegin(); it != cgen_nodes_for_class.cend(); ++it)
   {
-    emit_protobj_ref(l->hd()->get_name(), str);
+    CgenNode* current_node_ptr = (*it).second;
+    emit_protobj_ref(current_node_ptr->get_name(), str);
     str << ":" << endl;
-    str << WORD << l->hd()->get_tag() << endl;
-    str << WORD << l->hd()->get_size() << endl;
-    str << WORD << l->hd()->get_name() << DISPTAB_SUFFIX << endl;
+    str << WORD << current_node_ptr->get_tag() << endl;
+    str << WORD << current_node_ptr->get_size() << endl;
+    str << WORD << current_node_ptr->get_name() << DISPTAB_SUFFIX << endl;
+
+    if (current_node_ptr->get_name() == Bool || current_node_ptr->get_name() == Str || current_node_ptr->get_name() == Int)
+    {
+      //todo: no clue what this is for right now but coolc emits this for string bool and int proto objects
+      // The cool runtime system document writes the following 
+                  /*For Int objects, the only attribute is the 32-bit value of the integer. For Bool objects, the only
+              attribute is the 32-bit value 1 or 0, representing either true or false. The first attribute of String objects
+              is an object pointer to an Int object representing the size of the string. The actual sequence of ASCII
+              characters of the string starts at the second attribute (offset 16), terminates with a 0, and is then padded
+              with 0’s to a word boundary*/
+      // But I still don't understand why the proto-object wouldn't be using a int_const0
+      // Don't really understand the relationship between proto objects and consts
+      str << WORD << "0" << endl;
+    }
+
+    if (current_node_ptr->get_name() != Main)
+    {
+      str << WORD << "-1" << endl;
+    }
+  }
+}
+
+void CgenClassTable::code_class_names()
+{
+  str << CLASSNAMETAB << endl;
+  for(auto it = cgen_nodes_for_class.cbegin(); it != cgen_nodes_for_class.cend(); ++it)
+  {
+    str << WORD;
+    CgenNode* current_node_ptr = (*it).second;
+    current_node_ptr->get_string_entry()->code_ref(str);
+    str << endl;
+  }
+}
+
+void CgenClassTable::code_obj_table()
+{
+  str << CLASSOBJTAB << endl;
+  for(auto it = cgen_nodes_for_class.cbegin(); it != cgen_nodes_for_class.cend(); ++it)
+  {
+    str << WORD;
+    CgenNode* current_node_ptr = (*it).second;
+    emit_protobj_ref(current_node_ptr->get_name(), str);
+    str << endl;
+    str << WORD;
+    emit_init_ref(current_node_ptr->get_name(), str);
+    str << endl;
+  }
+}
+
+void CgenClassTable::code_dispatch_table()
+{
+  str << CLASSOBJTAB << endl;
+  for(auto it = cgen_nodes_for_class.cbegin(); it != cgen_nodes_for_class.cend(); ++it)
+  {
+    CgenNode* current_node_ptr = (*it).second;
+
+    std::vector<std::pair<Symbol,Symbol>> methods;
+
+    std::vector<CgenNodeP> inheritance_chain;
+
+    CgenNodeP parent = current_node_ptr;
+    while (parent != nullptr)
+    {
+      inheritance_chain.push_back(parent);
+      parent = parent->get_parentnd();
+    }
+
+    for(auto it = inheritance_chain.crbegin(); it != inheritance_chain.crend(); ++it)
+    {
+      CgenNodeP current_cgen_node = *it;
+      for (int i = current_cgen_node->features->first(); current_cgen_node->features->more(i); i = current_cgen_node->features->next(i))
+      {
+        Feature feature = current_cgen_node->features->nth(i);
+        if (feature->is_attr()) continue; // only care about methods
+        method_class* method_object = static_cast<method_class*>(feature);
+
+        methods.push_back({current_cgen_node->get_name(), method_object->name});
+      }
+    }
+
+    emit_disptable_ref(current_node_ptr->get_name(), str);
+    str << endl;
+
+    for (auto it = methods.cbegin(); it != methods.cend(); ++it)
+    {
+      str << WORD;
+      emit_method_ref((*it).first, (*it).second, str);
+      str << endl;
+    }
+    
   }
 }
 
@@ -771,13 +863,16 @@ void CgenClassTable::install_class(CgenNodeP nd)
 
   if (probe(name))
     {
-      return;
+      return; // todo: not sure when this would get hit 
     }
 
   // The class name is legal, so add it to the list of classes
   // and the symbol table.
-  nds = new List<CgenNode>(nd,nds);
+  code_gen_classes = new List<CgenNode>(nd,code_gen_classes);
   addid(name,nd);
+
+  // Add to the class tag to cgennode map
+  cgen_nodes_for_class[nd->get_tag()] = nd;
 }
 
 void CgenClassTable::install_classes(Classes cs)
@@ -791,9 +886,17 @@ void CgenClassTable::install_classes(Classes cs)
 //
 void CgenClassTable::build_inheritance_tree()
 {
-  for(List<CgenNode> *l = nds; l; l = l->tl())
+  for(List<CgenNode> *l = code_gen_classes; l; l = l->tl())
   {
       set_relations(l->hd());
+  }
+
+  // Now that the inheritance tree is built we can calculate the size of the objects
+  // Set proto-object sizes for all of the CgenNodes
+  for(auto it = cgen_nodes_for_class.cbegin(); it != cgen_nodes_for_class.cend(); ++it)
+  {
+    CgenNode* current_node_ptr = (*it).second;
+    current_node_ptr->calculate_size();
   }
 }
 
@@ -822,7 +925,20 @@ void CgenNode::set_parentnd(CgenNodeP p)
   parentnd = p;
 }
 
+void CgenNode::calculate_size()
+{
+  size = 3; // base object has a size of at least 3
 
+  CgenNodeP current_parent = this;
+
+  while (current_parent != nullptr) {
+    for (int i = features->first(); features->more(i); i = features->next(i))
+    {
+      if (features->nth(i)->is_attr()) size++;
+    }
+    current_parent = current_parent->parentnd;
+  }
+}
 
 void CgenClassTable::code()
 {
@@ -838,15 +954,14 @@ void CgenClassTable::code()
   if (cgen_debug) cout << "coding prototype objects" << endl;
   code_prototype_objects();
 
-//                 Add your code to emit
-//                   - class_nameTab
-//                   - dispatch tables
-//
-
   if (cgen_debug) cout << "coding class_nameTab" << endl;
+  code_class_names();
 
-  str << CLASSNAMETAB << endl;
-  
+  if (cgen_debug) cout << "coding class_objTab" << endl;
+  code_obj_table();
+
+  if (cgen_debug) cout << "coding dispatch tables" << endl;
+  code_dispatch_table();
 
   if (cgen_debug) cout << "coding global text" << endl;
   code_global_text();
@@ -877,17 +992,10 @@ CgenNode::CgenNode(Class_ nd, Basicness bstatus, CgenClassTableP ct) :
    children(NULL),
    basic_status(bstatus)
 { 
-   stringtable.add_string(name->get_string());          // Add class name to string table
-
-   Features features = get_features();
-   size = 3; // the most basic object is at least 3 words large for the class tag, size, and dispatch table ptr
-   for(int i = features->first(); features->more(i); i = features->next(i))
-   {
-      Feature feature = features->nth(i);
-      if (feature->is_attr()) size++;
-   }
-
+   string_entry = stringtable.add_string(name->get_string()); // Add class name to string table
    tag = ct->get_next_class_tag();
+
+   // Note that we do not initialize the size variable here because we don't know the size of the proto-object until we build in the inheritance graph
 }
 
 

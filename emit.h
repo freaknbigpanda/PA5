@@ -30,7 +30,7 @@
 #define DISPTAB_SUFFIX       "_dispTab"
 #define METHOD_SEP           "."
 #define CLASSINIT_SUFFIX     "_init"
-#define PROTOBJ_SUFFIX       "_protoObj"
+#define PROTOBJ_SUFFIX       "_protObj"
 #define OBJECTPROTOBJ        "Object_protObj"
 #define INTCONST_PREFIX      "int_const"
 #define STRCONST_PREFIX      "str_const"

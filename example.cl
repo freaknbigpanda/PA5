@@ -8,6 +8,10 @@ class Main inherits IO {
 };
 
 class Hello {
+  a: Int <- 42;
+};
 
+class Bye inherits Hello {
+  b: Int <- 42;
 };
 
