@@ -38,6 +38,8 @@ private:
    void code_class_names();
    void code_obj_table();
    void code_dispatch_table();
+   void code_object_initializers();
+   void code_object_methods();
 
    // The following creates an inheritance graph from
    // a list of classes.  The graph is implemented as
@@ -52,7 +54,7 @@ private:
 public:
    CgenClassTable(Classes, ostream& str);
    void code();
-   int get_next_class_tag() { return nonbasicclasstag++; }
+   int get_next_class_tag(Symbol class_name);
    CgenNodeP get_class_with_tag(int tag) const;
    CgenNodeMap get_cgen_node_map() const { return cgen_nodes_for_class; }
    CgenNodeP root();

@@ -72,16 +72,20 @@ Features get_features() { return features; }
 
 #define Feature_EXTRAS                                        \
 virtual void dump_with_types(ostream&,int) = 0;	\
-virtual bool is_attr() = 0;
+virtual bool is_attr() = 0; \
+virtual Expression get_expression() = 0;
 
 #define Feature_SHARED_EXTRAS                                       \
 void dump_with_types(ostream&,int);
 
 #define attr_EXTRAS \
-bool is_attr() { return true; }
+bool is_attr() { return true; } \
+Expression get_expression() { return init; }	\
+Symbol get_declared_type() { return type_decl; }
 
 #define method_EXTRAS \
-bool is_attr() { return false; }
+bool is_attr() { return false; }	\
+Expression get_expression() { return expr; }
 
 #define Formal_EXTRAS                              \
 virtual void dump_with_types(ostream&,int) = 0;

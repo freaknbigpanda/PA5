@@ -25,6 +25,8 @@
 #include "cgen.h"
 #include "cgen_gc.h"
 #include <vector>
+#include <sstream>
+#include <set>
 
 extern void emit_string_constant(ostream& str, char *s);
 extern int cgen_debug;
@@ -141,6 +143,17 @@ void program_class::cgen(ostream &os)
   os << "\n# end of generated code\n";
 }
 
+// enum class SRegisters: uint8_t
+// {
+//   S0 = 0b00000001,
+//   S1 = 0b00000010,
+//   S2 = 0b00000100,
+//   S3 = 0b00001000,
+//   S4 = 0b00010000,
+//   S5 = 0b00100000,
+//   S6 = 0b01000000,
+//   S7 = 0b10000000
+// };
 
 //////////////////////////////////////////////////////////////////////////////
 //
@@ -162,22 +175,44 @@ static void emit_load(char *dest_reg, int offset, char *source_reg, ostream& s)
     << endl;
 }
 
-static void emit_store(char *source_reg, int offset, char *dest_reg, ostream& s)
+// static void emit_callee_activation_record(std::set<SRegisters> used_s_registers, uint8_t number_of_parameters, ostream& s)
+// {
+//   static const std::map<SRegisters, std::string> registers_to_names = {{SRegisters::S0, "$s0"}, {SRegisters::S1, "$s1"}, 
+//   {SRegisters::S2, "$s2"}, {SRegisters::S3, "$s3"}, {SRegisters::S4, "$s4"}, {SRegisters::S5, "$s5"}, 
+//   {SRegisters::S6, "$s6"}, {SRegisters::S7, "$s7"}};
+
+//   // Restore the fp and ra registers to their state before we entered the method
+//   int offset = 0;
+//   emit_load(FP, offset++, SP, s);
+//   emit_load(RA, offset++, SP, s);
+
+//   // todo: might need to add this back later
+//   // for (auto it = used_s_registers.begin(); it != used_s_registers.end(); ++it)
+//   // {
+//   //   emit_load(registers_to_names.find(*it)->second.c_str(), offset++, SP, s);
+//   // }
+
+//   // subtract the stack pointer so that it is where it was before we entered the method, including the number of parameters that the caller pushed onto to the stack
+//   emit_addiu(SP, SP, (used_s_registers.size() + 2 + number_of_parameters) * WORD_SIZE, s);
+
+// }
+
+static void emit_store(const char *source_reg, int offset,const char *dest_reg, ostream& s)
 {
   s << SW << source_reg << " " << offset * WORD_SIZE << "(" << dest_reg << ")"
       << endl;
 }
 
-static void emit_load_imm(char *dest_reg, int val, ostream& s)
+static void emit_load_imm(const char *dest_reg, int val, ostream& s)
 { s << LI << dest_reg << " " << val << endl; }
 
-static void emit_load_address(char *dest_reg, char *address, ostream& s)
+static void emit_load_address(const char *dest_reg,const char *address, ostream& s)
 { s << LA << dest_reg << " " << address << endl; }
 
-static void emit_partial_load_address(char *dest_reg, ostream& s)
+static void emit_partial_load_address(const char *dest_reg, ostream& s)
 { s << LA << dest_reg << " "; }
 
-static void emit_load_bool(char *dest, const BoolConst& b, ostream& s)
+static void emit_load_bool(const char *dest, const BoolConst& b, ostream& s)
 {
   emit_partial_load_address(dest,s);
   b.code_ref(s);
@@ -198,37 +233,37 @@ static void emit_load_int(char *dest, IntEntry *i, ostream& s)
   s << endl;
 }
 
-static void emit_move(char *dest_reg, char *source_reg, ostream& s)
+static void emit_move(const char *dest_reg, const char *source_reg, ostream& s)
 { s << MOVE << dest_reg << " " << source_reg << endl; }
 
-static void emit_neg(char *dest, char *src1, ostream& s)
+static void emit_neg(const char *dest, const char *src1, ostream& s)
 { s << NEG << dest << " " << src1 << endl; }
 
-static void emit_add(char *dest, char *src1, char *src2, ostream& s)
+static void emit_add(const char *dest, const char *src1, const char *src2, ostream& s)
 { s << ADD << dest << " " << src1 << " " << src2 << endl; }
 
-static void emit_addu(char *dest, char *src1, char *src2, ostream& s)
+static void emit_addu(const char *dest, const char *src1, const char *src2, ostream& s)
 { s << ADDU << dest << " " << src1 << " " << src2 << endl; }
 
-static void emit_addiu(char *dest, char *src1, int imm, ostream& s)
+static void emit_addiu(const char *dest, const char *src1, int imm, ostream& s)
 { s << ADDIU << dest << " " << src1 << " " << imm << endl; }
 
-static void emit_div(char *dest, char *src1, char *src2, ostream& s)
+static void emit_div(const char *dest, const char *src1, const char *src2, ostream& s)
 { s << DIV << dest << " " << src1 << " " << src2 << endl; }
 
-static void emit_mul(char *dest, char *src1, char *src2, ostream& s)
+static void emit_mul(const char *dest, const char *src1, const char *src2, ostream& s)
 { s << MUL << dest << " " << src1 << " " << src2 << endl; }
 
-static void emit_sub(char *dest, char *src1, char *src2, ostream& s)
+static void emit_sub(const char *dest, const char *src1, const char *src2, ostream& s)
 { s << SUB << dest << " " << src1 << " " << src2 << endl; }
 
-static void emit_sll(char *dest, char *src1, int num, ostream& s)
+static void emit_sll(const char *dest, const char *src1, int num, ostream& s)
 { s << SLL << dest << " " << src1 << " " << num << endl; }
 
-static void emit_jalr(char *dest, ostream& s)
+static void emit_jalr(const char *dest, ostream& s)
 { s << JALR << "\t" << dest << endl; }
 
-static void emit_jal(char *address,ostream &s)
+static void emit_jal(const char *address,ostream &s)
 { s << JAL << address << endl; }
 
 static void emit_return(ostream& s)
@@ -353,6 +388,82 @@ static void emit_gc_check(char *source, ostream &s)
 {
   if (source != (char*)A1) emit_move(A1, source, s);
   s << JAL << "_gc_check" << endl;
+}
+
+static void emit_callee_activation_record(/*std::set<SRegisters> used_s_registers,*/ Expression method_body, const int number_of_parameters, ostream& s)
+{
+  // static const std::map<SRegisters, std::string> registers_to_names = {{SRegisters::S0, "$s0"}, {SRegisters::S1, "$s1"}, 
+  // {SRegisters::S2, "$s2"}, {SRegisters::S3, "$s3"}, {SRegisters::S4, "$s4"}, {SRegisters::S5, "$s5"}, 
+  // {SRegisters::S6, "$s6"}, {SRegisters::S7, "$s7"}};
+
+  // // grow the stack pointer for all of the used s registers + fp + ra
+  // emit_addiu(SP, SP, (-1 * used_s_registers.size() + 2) * WORD_SIZE, s);
+
+  // push all the registers to the stack
+  // int offset = 0;
+  // emit_store(RA, offset++, SP, s);
+
+  // setup the frame pointer to point to what?
+
+  // todo: might need to add this back later
+  // for (auto it = used_s_registers.begin(); it != used_s_registers.end(); ++it)
+  // {
+  //   emit_store(registers_to_names.find(*it)->second.c_str(), offset++, SP, s);
+  // }
+
+  // setup a new frame pointer at the current stack pointer
+  emit_move(FP, SP, s);
+  
+  // store ra register on the stack because codegen for the method body may trample it
+  emit_store(RA, 0, SP, s);
+  emit_addiu(SP, SP, WORD_SIZE, s);
+
+  // store register S0 on the stack because apparently this is required
+  // todo: figure out why
+  // emit_store(SELF, 0, SP, s);
+  // emit_addiu(SP, SP, WORD_SIZE, s);
+  
+  // move the value of SELF into ACC for function body execution
+  // emit_move(ACC, SELF, s);
+
+  // emit code for the method body
+  method_body->code(s);
+
+  // todo: I don't see why I would want to do this, ACC will contain the function result.
+  // emit_move(SELF, ACC, s); 
+
+  // restore s0/SELF register
+  emit_load(SELF, 1, SP, s);
+
+  // restore ra register
+  emit_load(RA, 2, SP, s);
+  
+  // restore old sp from before the method was called, number of parameters + 1 for ra, 1 for fp, and 1 for s0/SELF
+  emit_addiu(SP, SP, (number_of_parameters + 2) * WORD_SIZE, s);
+
+  // restore old frame pointer so that the function that called us will have the frame pointer back
+  emit_load(FP, 0, SP, s);
+
+  // jump to address in ra
+  emit_return(s);
+}
+
+static void emit_caller_activation_record(Expressions parameters, const std::string& method_name, ostream& s)
+{
+  // save value of frame pointer so that it can be restored after function exit
+  emit_store(FP, 0, SP, s);
+  emit_addiu(SP, SP, -1 * WORD_SIZE, s);
+
+  // save actual parameters in reverse order, the first parameter will be at the lowest address
+  for(int i = parameters->first(); parameters->more(i); i = parameters->next(i))
+  {
+      parameters->nth(i)->code(s);
+      emit_store(ACC, 0, SP, s);
+      emit_addiu(SP, SP, -1 * WORD_SIZE, s);
+  }
+
+  // jal instruction to jump to the method
+  emit_jal(method_name.c_str(), s);
 }
 
 
@@ -612,10 +723,10 @@ void CgenClassTable::code_constants()
 
 CgenClassTable::CgenClassTable(Classes classes, ostream& s) : code_gen_classes(NULL) , str(s)
 {
-  stringclasstag = 0 /* Change to your String class tag here */;
-  intclasstag =    1 /* Change to your Int class tag here */;
-  boolclasstag =   2 /* Change to your Bool class tag here */;
-  nonbasicclasstag = 3;
+  stringclasstag = 4 /* Change to your String class tag here */;
+  intclasstag =    2 /* Change to your Int class tag here */;
+  boolclasstag =   3 /* Change to your Bool class tag here */;
+  nonbasicclasstag = 5;
 
   enterscope();
   if (cgen_debug) cout << "Building CgenClassTable" << endl;
@@ -638,18 +749,52 @@ void CgenClassTable::code_prototype_objects()
     str << WORD << current_node_ptr->get_size() << endl;
     str << WORD << current_node_ptr->get_name() << DISPTAB_SUFFIX << endl;
 
-    if (current_node_ptr->get_name() == Bool || current_node_ptr->get_name() == Str || current_node_ptr->get_name() == Int)
+    // if (current_node_ptr->get_name() == Bool || current_node_ptr->get_name() == Str || current_node_ptr->get_name() == Int)
+    // {
+    //   //todo: no clue what this is for right now but coolc emits this for string bool and int proto objects
+    //   // The cool runtime system document writes the following 
+    //               /*For Int objects, the only attribute is the 32-bit value of the integer. For Bool objects, the only
+    //           attribute is the 32-bit value 1 or 0, representing either true or false. The first attribute of String objects
+    //           is an object pointer to an Int object representing the size of the string. The actual sequence of ASCII
+    //           characters of the string starts at the second attribute (offset 16), terminates with a 0, and is then padded
+    //           with 0’s to a word boundary*/
+    //   // But I still don't understand why the proto-object wouldn't be using a int_const0
+    //   // Don't really understand the relationship between proto objects and consts
+    //   str << WORD << "0" << endl;
+    // }
+
+    Features features = current_node_ptr->get_features();
+    for (int i = features->first(); features->more(i); i = features->next(i))
     {
-      //todo: no clue what this is for right now but coolc emits this for string bool and int proto objects
-      // The cool runtime system document writes the following 
-                  /*For Int objects, the only attribute is the 32-bit value of the integer. For Bool objects, the only
-              attribute is the 32-bit value 1 or 0, representing either true or false. The first attribute of String objects
-              is an object pointer to an Int object representing the size of the string. The actual sequence of ASCII
-              characters of the string starts at the second attribute (offset 16), terminates with a 0, and is then padded
-              with 0’s to a word boundary*/
-      // But I still don't understand why the proto-object wouldn't be using a int_const0
-      // Don't really understand the relationship between proto objects and consts
-      str << WORD << "0" << endl;
+      Feature feature = features->nth(i);
+      if (feature->is_attr() == false) continue;
+
+      attr_class* attribute = static_cast<attr_class*>(feature);
+
+      str << WORD;
+      Symbol attribute_type = attribute->get_declared_type();
+      if (attribute_type == Int)
+      {
+        IntEntry* const_entry = inttable.lookup_string("0");
+        const_entry->code_ref(str);
+      } 
+      else if (attribute_type == Bool)
+      {
+        falsebool.code_ref(str);
+      }
+      else if (attribute_type == Str)
+      {
+        StringEntry* const_entry = stringtable.lookup_string("");
+        const_entry->code_ref(str);
+      }
+      else
+      {
+        // void for everything else
+        str << "0";
+      }
+      str << endl;
+
+      
     }
 
     if (current_node_ptr->get_name() != Main)
@@ -688,7 +833,6 @@ void CgenClassTable::code_obj_table()
 
 void CgenClassTable::code_dispatch_table()
 {
-  str << CLASSOBJTAB << endl;
   for(auto it = cgen_nodes_for_class.cbegin(); it != cgen_nodes_for_class.cend(); ++it)
   {
     CgenNode* current_node_ptr = (*it).second;
@@ -697,6 +841,7 @@ void CgenClassTable::code_dispatch_table()
 
     std::vector<CgenNodeP> inheritance_chain;
 
+    // Building an inheritance chain so that we can interate over it backwards since we want to print references to the most parent object methods first (i.e. methods of Object first)
     CgenNodeP parent = current_node_ptr;
     while (parent != nullptr)
     {
@@ -728,6 +873,66 @@ void CgenClassTable::code_dispatch_table()
     }
     
   }
+}
+
+void CgenClassTable::code_object_initializers()
+{
+  for(auto it = cgen_nodes_for_class.cbegin(); it != cgen_nodes_for_class.cend(); ++it)
+  {
+    CgenNode* current_node_ptr = (*it).second;
+    emit_init_ref(current_node_ptr->get_name(), str);
+    str << endl;
+    // Grow the stack 12 bytes for 3 words worth of shit
+    emit_addiu(SP, SP, -12, str);
+    // Preserve all of the registers we have to for a function call
+    // Todo: the runtime system pdf mentions that s0-s7 are "The standard callee-saved registers on the MIPS architecture" so not sure if I need to save them all here or not
+    // I should only need to save these registers if I use them
+    emit_store(FP, 3, SP, str);
+    emit_store(SELF, 2, SP, str);
+    emit_store(RA, 1, SP, str);
+    
+    // the stack pointer now points to unused stack memory, set the FP to be 1 word before
+    emit_addiu(FP, SP, 4, str);
+
+    // Save the value of self into register S0
+    emit_move(SELF, ACC, str);
+    if (current_node_ptr->get_name() != Object) 
+    {
+      std::stringstream init_ref;
+      emit_init_ref(current_node_ptr->get_parent(), init_ref);
+      emit_jal(init_ref.str().c_str(), str);
+    }
+
+    // Initialize attributes here
+    Features features = current_node_ptr->get_features();
+    int attribute_index = 0;
+    for (int i = features->first(); features->more(i); i = features->next(i))
+    {
+      Feature feature = features->nth(i);
+      if (features->nth(i)->is_attr() == false) continue;
+      
+      // Emit code for attribute initialization
+      feature->get_expression()->code(str);
+
+      // Store the result of the attribute initialization in the correct location in the heap
+      emit_store(ACC, attribute_index + 3, SELF, str);
+      attribute_index++;
+    }
+
+    // Restore the value of self back to register A0 before the method exits
+    emit_move(ACC, SELF, str);
+    emit_load(FP, 3, SP, str);
+    emit_load(SELF, 2, SP, str);
+    emit_load(RA, 1, SP, str);
+    emit_addiu(SP, SP, 12, str);
+
+    emit_return(str);
+  }
+}
+
+void CgenClassTable::code_object_methods()
+{
+
 }
 
 void CgenClassTable::install_basic_classes()
@@ -932,9 +1137,9 @@ void CgenNode::calculate_size()
   CgenNodeP current_parent = this;
 
   while (current_parent != nullptr) {
-    for (int i = features->first(); features->more(i); i = features->next(i))
+    for (int i = current_parent->features->first(); current_parent->features->more(i); i = current_parent->features->next(i))
     {
-      if (features->nth(i)->is_attr()) size++;
+      if (current_parent->features->nth(i)->is_attr()) size++;
     }
     current_parent = current_parent->parentnd;
   }
@@ -966,13 +1171,20 @@ void CgenClassTable::code()
   if (cgen_debug) cout << "coding global text" << endl;
   code_global_text();
 
-//                 Add your code to emit
-//                   - object initializer
-//                   - the class methods
-//                   - etc...
+  if (cgen_debug) cout << "coding object initializers" << endl;
+  code_object_initializers();
 
+  if (cgen_debug) cout << "coding object methods" << endl;
+  code_object_methods();
 }
 
+int CgenClassTable::get_next_class_tag(Symbol class_name)
+{
+  if (class_name == Bool) return boolclasstag;
+  else if (class_name == Int) return intclasstag;
+  else if (class_name == Str) return stringclasstag; 
+  else return nonbasicclasstag++;
+}
 
 CgenNodeP CgenClassTable::root()
 {
@@ -993,9 +1205,9 @@ CgenNode::CgenNode(Class_ nd, Basicness bstatus, CgenClassTableP ct) :
    basic_status(bstatus)
 { 
    string_entry = stringtable.add_string(name->get_string()); // Add class name to string table
-   tag = ct->get_next_class_tag();
+   tag = ct->get_next_class_tag(nd->get_name());
 
-   // Note that we do not initialize the size variable here because we don't know the size of the proto-object until we build in the inheritance graph
+   // Note that we do not initialize the size variable here because we don't know the size of the proto-object until we build the inheritance graph
 }
 
 
