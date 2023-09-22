@@ -20,6 +20,8 @@ void dump_Symbol(ostream& stream, int padding, Symbol b);
 void assert_Symbol(Symbol b);
 Symbol copy_Symbol(Symbol b);
 
+class CgenNode;
+
 class Program_class;
 typedef Program_class *Program;
 class Class__class;
@@ -73,7 +75,8 @@ Features get_features() { return features; }
 #define Feature_EXTRAS                                        \
 virtual void dump_with_types(ostream&,int) = 0;	\
 virtual bool is_attr() = 0; \
-virtual Expression get_expression() = 0;
+virtual Expression get_expression() = 0; \
+virtual Symbol get_name() = 0;
 
 #define Feature_SHARED_EXTRAS                                       \
 void dump_with_types(ostream&,int);
@@ -81,18 +84,21 @@ void dump_with_types(ostream&,int);
 #define attr_EXTRAS \
 bool is_attr() { return true; } \
 Expression get_expression() { return init; }	\
-Symbol get_declared_type() { return type_decl; }
+Symbol get_declared_type() { return type_decl; }	\
+Symbol get_name() { return name; }
 
 #define method_EXTRAS \
 bool is_attr() { return false; }	\
-Expression get_expression() { return expr; }
+Expression get_expression() { return expr; }	\
+Symbol get_name() { return name; } \
+Formals get_parameters() { return formals; }
 
 #define Formal_EXTRAS                              \
-virtual void dump_with_types(ostream&,int) = 0;
+virtual void dump_with_types(ostream&,int) = 0;	\
 
 
 #define formal_EXTRAS                           \
-void dump_with_types(ostream&,int);
+void dump_with_types(ostream&,int);	\
 
 
 #define Case_EXTRAS                             \
@@ -107,14 +113,18 @@ void dump_with_types(ostream& ,int);
 Symbol type;                                 \
 Symbol get_type() { return type; }           \
 Expression set_type(Symbol s) { type = s; return this; } \
-virtual void code(ostream&) = 0; \
+virtual void code(ostream&, CgenNode*) = 0; \
 virtual void dump_with_types(ostream&,int) = 0;  \
 void dump_type(ostream&, int);               \
 Expression_class() { type = (Symbol) NULL; }
 
 #define Expression_SHARED_EXTRAS           \
-void code(ostream&); 			   \
+void code(ostream&, CgenNode*); 			   \
 void dump_with_types(ostream&,int); 
+
+
+#define object_EXTRAS                                   \
+Symbol get_name() { return name; }
 
 
 #endif

@@ -27,6 +27,7 @@
 #include <vector>
 #include <sstream>
 #include <set>
+#include <algorithm>
 
 extern void emit_string_constant(ostream& str, char *s);
 extern int cgen_debug;
@@ -390,81 +391,61 @@ static void emit_gc_check(char *source, ostream &s)
   s << JAL << "_gc_check" << endl;
 }
 
-static void emit_callee_activation_record(/*std::set<SRegisters> used_s_registers,*/ Expression method_body, const int number_of_parameters, ostream& s)
-{
-  // static const std::map<SRegisters, std::string> registers_to_names = {{SRegisters::S0, "$s0"}, {SRegisters::S1, "$s1"}, 
-  // {SRegisters::S2, "$s2"}, {SRegisters::S3, "$s3"}, {SRegisters::S4, "$s4"}, {SRegisters::S5, "$s5"}, 
-  // {SRegisters::S6, "$s6"}, {SRegisters::S7, "$s7"}};
-
-  // // grow the stack pointer for all of the used s registers + fp + ra
-  // emit_addiu(SP, SP, (-1 * used_s_registers.size() + 2) * WORD_SIZE, s);
-
-  // push all the registers to the stack
-  // int offset = 0;
-  // emit_store(RA, offset++, SP, s);
-
-  // setup the frame pointer to point to what?
-
-  // todo: might need to add this back later
-  // for (auto it = used_s_registers.begin(); it != used_s_registers.end(); ++it)
-  // {
-  //   emit_store(registers_to_names.find(*it)->second.c_str(), offset++, SP, s);
-  // }
-
-  // setup a new frame pointer at the current stack pointer
-  emit_move(FP, SP, s);
+// static void emit_callee_activation_record(/*std::set<SRegisters> used_s_registers,*/ Expression method_body, const int number_of_parameters, ostream& s)
+// {
+//   // setup a new frame pointer at the current stack pointer
+//   emit_move(FP, SP, s);
   
-  // store ra register on the stack because codegen for the method body may trample it
-  emit_store(RA, 0, SP, s);
-  emit_addiu(SP, SP, WORD_SIZE, s);
+//   // store ra register on the stack because codegen for the method body may trample it
+//   emit_store(RA, 0, SP, s);
+//   emit_addiu(SP, SP, -1 * WORD_SIZE, s);
 
-  // store register S0 on the stack because apparently this is required
-  // todo: figure out why
-  // emit_store(SELF, 0, SP, s);
-  // emit_addiu(SP, SP, WORD_SIZE, s);
+//   // store register S0 on the stack because apparently this is required
+//   // todo: figure out why
+//   emit_store(SELF, 0, SP, s);
+//   emit_addiu(SP, SP, -1 *WORD_SIZE, s);
   
-  // move the value of SELF into ACC for function body execution
-  // emit_move(ACC, SELF, s);
+//   // save the value of SELF in aO
+//   emit_move(SELF, ACC, s);
 
-  // emit code for the method body
-  method_body->code(s);
+//   // emit code for the method body
+//   method_body->code(s);
 
-  // todo: I don't see why I would want to do this, ACC will contain the function result.
-  // emit_move(SELF, ACC, s); 
+//   // restore s0/SELF register
+//   emit_load(SELF, 1, SP, s);
 
-  // restore s0/SELF register
-  emit_load(SELF, 1, SP, s);
-
-  // restore ra register
-  emit_load(RA, 2, SP, s);
+//   // restore ra register
+//   emit_load(RA, 2, SP, s);
   
-  // restore old sp from before the method was called, number of parameters + 1 for ra, 1 for fp, and 1 for s0/SELF
-  emit_addiu(SP, SP, (number_of_parameters + 2) * WORD_SIZE, s);
+//   // restore old sp from before the method was called, number of parameters + 1 for ra, 1 for fp, and 1 for s0/SELF
+//   emit_addiu(SP, SP, (number_of_parameters + 3) * WORD_SIZE, s);
 
-  // restore old frame pointer so that the function that called us will have the frame pointer back
-  emit_load(FP, 0, SP, s);
+//   // restore old frame pointer so that the function that called us will have the frame pointer back
+//   emit_load(FP, 0, SP, s);
 
-  // jump to address in ra
-  emit_return(s);
-}
+//   // jump to address in ra
+//   emit_return(s);
+// }
 
-static void emit_caller_activation_record(Expressions parameters, const std::string& method_name, ostream& s)
-{
-  // save value of frame pointer so that it can be restored after function exit
-  emit_store(FP, 0, SP, s);
-  emit_addiu(SP, SP, -1 * WORD_SIZE, s);
+// static void emit_caller_activation_record(Expressions parameters, const std::string& method_name, ostream& s)
+// {
+//   // todo: how do we deal with local variables?
 
-  // save actual parameters in reverse order, the first parameter will be at the lowest address
-  for(int i = parameters->first(); parameters->more(i); i = parameters->next(i))
-  {
-      parameters->nth(i)->code(s);
-      emit_store(ACC, 0, SP, s);
-      emit_addiu(SP, SP, -1 * WORD_SIZE, s);
-  }
+//   // save value of frame pointer so that it can be restored after function exit
+//   emit_store(FP, 0, SP, s);
+//   emit_addiu(SP, SP, -1 * WORD_SIZE, s);
 
-  // jal instruction to jump to the method
-  emit_jal(method_name.c_str(), s);
-}
+//   // save actual parameters in reverse order, the first parameter will be at the lowest address
+//   for(int i = parameters->first(); parameters->more(i); i = parameters->next(i))
+//   {
+//       parameters->nth(i)->code(s);
+//       emit_store(ACC, 0, SP, s);
+//       emit_addiu(SP, SP, -1 * WORD_SIZE, s);
+//   }
+
+//   // jal instruction to jump to the method
+//   emit_jal(method_name.c_str(), s);
+// }
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -616,7 +597,6 @@ void CgenClassTable::code_global_data()
   Symbol integer = idtable.lookup_string(INTNAME);
   Symbol boolc   = idtable.lookup_string(BOOLNAME);
 
-  //todo: I really don't understand why we want to use ALIGN here, just don't get it really
   str << "\t.data\n" << ALIGN;
   //
   // The following global names must be defined first.
@@ -763,13 +743,10 @@ void CgenClassTable::code_prototype_objects()
     //   str << WORD << "0" << endl;
     // }
 
-    Features features = current_node_ptr->get_features();
-    for (int i = features->first(); features->more(i); i = features->next(i))
+    std::vector<attr_class*> attributes = current_node_ptr->get_attributes();
+    for (auto it = attributes.cbegin(); it != attributes.cend(); ++it)
     {
-      Feature feature = features->nth(i);
-      if (feature->is_attr() == false) continue;
-
-      attr_class* attribute = static_cast<attr_class*>(feature);
+      attr_class* attribute = *it;
 
       str << WORD;
       Symbol attribute_type = attribute->get_declared_type();
@@ -793,8 +770,6 @@ void CgenClassTable::code_prototype_objects()
         str << "0";
       }
       str << endl;
-
-      
     }
 
     if (current_node_ptr->get_name() != Main)
@@ -806,7 +781,7 @@ void CgenClassTable::code_prototype_objects()
 
 void CgenClassTable::code_class_names()
 {
-  str << CLASSNAMETAB << endl;
+  str << CLASSNAMETAB << ":" << endl;
   for(auto it = cgen_nodes_for_class.cbegin(); it != cgen_nodes_for_class.cend(); ++it)
   {
     str << WORD;
@@ -818,7 +793,7 @@ void CgenClassTable::code_class_names()
 
 void CgenClassTable::code_obj_table()
 {
-  str << CLASSOBJTAB << endl;
+  str << CLASSOBJTAB << ":" << endl;
   for(auto it = cgen_nodes_for_class.cbegin(); it != cgen_nodes_for_class.cend(); ++it)
   {
     str << WORD;
@@ -837,41 +812,16 @@ void CgenClassTable::code_dispatch_table()
   {
     CgenNode* current_node_ptr = (*it).second;
 
-    std::vector<std::pair<Symbol,Symbol>> methods;
-
-    std::vector<CgenNodeP> inheritance_chain;
-
-    // Building an inheritance chain so that we can interate over it backwards since we want to print references to the most parent object methods first (i.e. methods of Object first)
-    CgenNodeP parent = current_node_ptr;
-    while (parent != nullptr)
-    {
-      inheritance_chain.push_back(parent);
-      parent = parent->get_parentnd();
-    }
-
-    for(auto it = inheritance_chain.crbegin(); it != inheritance_chain.crend(); ++it)
-    {
-      CgenNodeP current_cgen_node = *it;
-      for (int i = current_cgen_node->features->first(); current_cgen_node->features->more(i); i = current_cgen_node->features->next(i))
-      {
-        Feature feature = current_cgen_node->features->nth(i);
-        if (feature->is_attr()) continue; // only care about methods
-        method_class* method_object = static_cast<method_class*>(feature);
-
-        methods.push_back({current_cgen_node->get_name(), method_object->name});
-      }
-    }
-
     emit_disptable_ref(current_node_ptr->get_name(), str);
-    str << endl;
+    str << ":" << endl;
 
+    std::vector<method_class*> methods = current_node_ptr->get_methods();
     for (auto it = methods.cbegin(); it != methods.cend(); ++it)
     {
       str << WORD;
-      emit_method_ref((*it).first, (*it).second, str);
+      emit_method_ref(current_node_ptr->get_name(), (*it)->get_name(), str);
       str << endl;
     }
-    
   }
 }
 
@@ -881,7 +831,7 @@ void CgenClassTable::code_object_initializers()
   {
     CgenNode* current_node_ptr = (*it).second;
     emit_init_ref(current_node_ptr->get_name(), str);
-    str << endl;
+    str << ":" << endl;
     // Grow the stack 12 bytes for 3 words worth of shit
     emit_addiu(SP, SP, -12, str);
     // Preserve all of the registers we have to for a function call
@@ -903,16 +853,15 @@ void CgenClassTable::code_object_initializers()
       emit_jal(init_ref.str().c_str(), str);
     }
 
-    // Initialize attributes here
-    Features features = current_node_ptr->get_features();
+    // Initializing attributes
+    std::vector<attr_class*> attributes = current_node_ptr->get_attributes();
     int attribute_index = 0;
-    for (int i = features->first(); features->more(i); i = features->next(i))
+    for (auto it = attributes.cbegin(); it != attributes.cend(); ++it)
     {
-      Feature feature = features->nth(i);
-      if (features->nth(i)->is_attr() == false) continue;
+      attr_class* attribute = *it;
       
       // Emit code for attribute initialization
-      feature->get_expression()->code(str);
+      attribute->get_expression()->code(str, current_node_ptr);
 
       // Store the result of the attribute initialization in the correct location in the heap
       emit_store(ACC, attribute_index + 3, SELF, str);
@@ -932,7 +881,59 @@ void CgenClassTable::code_object_initializers()
 
 void CgenClassTable::code_object_methods()
 {
+  for(auto it = cgen_nodes_for_class.cbegin(); it != cgen_nodes_for_class.cend(); ++it)
+  {
+    CgenNodeP current_node_ptr = (*it).second;
+    // We don't need to generate methods for basic classes since it has already been done
+    if (current_node_ptr->basic()) continue; 
 
+    std::vector<method_class*> methods = current_node_ptr->get_methods();
+    for (auto it = methods.cbegin(); it != methods.cend(); ++it)
+    {
+
+      method_class* method = *it;
+      emit_method_ref(current_node_ptr->get_name(), method->get_name(), str);
+      str << ":" << endl;
+     
+      Formals parameters = method->get_parameters();
+
+      // **** Begin method code generation ****
+
+      // setup a new frame pointer at the current stack pointer
+      emit_move(FP, SP, str);
+      
+      // store ra register on the stack because codegen for the method body may trample it
+      emit_store(RA, 0, SP, str);
+      emit_addiu(SP, SP, -1 * WORD_SIZE, str);
+
+      // store register S0 on the stack because apparently this is required by the cool runtime system
+      emit_store(SELF, 0, SP, str);
+      emit_addiu(SP, SP, -1 *WORD_SIZE, str);
+      
+      // save the value of self stored in aO to register s0
+      emit_move(SELF, ACC, str);
+
+      // emit code for the method body
+      method->get_expression()->code(str, current_node_ptr);
+
+      // restore s0/SELF register
+      emit_load(SELF, 1, SP, str);
+
+      // restore ra register
+      emit_load(RA, 2, SP, str);
+      
+      // restore old sp from before the method was called, number of parameters + 1 for ra, 1 for fp, and 1 for s0/SELF
+      emit_addiu(SP, SP, (parameters->len() + 3) * WORD_SIZE, str);
+
+      // restore old frame pointer so that the function that called us will have the frame pointer back
+      emit_load(FP, 0, SP, str);
+
+      // jump to address in ra
+      emit_return(str);
+
+      // **** End method code generation ****
+    }
+  }
 }
 
 void CgenClassTable::install_basic_classes()
@@ -1097,11 +1098,11 @@ void CgenClassTable::build_inheritance_tree()
   }
 
   // Now that the inheritance tree is built we can calculate the size of the objects
-  // Set proto-object sizes for all of the CgenNodes
+  // Set proto-object sizes and collect attributes and methods in vectors for all of the CgenNodes
   for(auto it = cgen_nodes_for_class.cbegin(); it != cgen_nodes_for_class.cend(); ++it)
   {
     CgenNode* current_node_ptr = (*it).second;
-    current_node_ptr->calculate_size();
+    current_node_ptr->set_size_attributes_methods();
   }
 }
 
@@ -1130,19 +1131,44 @@ void CgenNode::set_parentnd(CgenNodeP p)
   parentnd = p;
 }
 
-void CgenNode::calculate_size()
+void CgenNode::set_size_attributes_methods()
 {
-  size = 3; // base object has a size of at least 3
+  size = 3; // base object has a size of at least 3 for the class tag, object size, and dispatch pointer
 
   CgenNodeP current_parent = this;
 
   while (current_parent != nullptr) {
-    for (int i = current_parent->features->first(); current_parent->features->more(i); i = current_parent->features->next(i))
+    Features features = current_parent->features;
+    for (int i = features->first(); features->more(i); i = features->next(i))
     {
-      if (current_parent->features->nth(i)->is_attr()) size++;
+      Feature feature = features->nth(i);
+      if (feature->is_attr())
+      {
+        size++;
+        attr_class* attribute = static_cast<attr_class*>(feature);
+        attributes.push_back(attribute);
+        attribute_name_map[attribute->get_name()] = attribute;
+      }
+      else
+      {
+        method_class* method = static_cast<method_class*>(feature);
+        methods.push_back(method);
+        method_name_map[method->get_name()] = method;
+      }
     }
     current_parent = current_parent->parentnd;
   }
+  // Reversing because we want the attrbutes and methods for the furthest parent (i.e. Object class) listed first
+  std::reverse(methods.begin(), methods.end());
+  std::reverse(attributes.begin(), attributes.end());
+}
+
+int CgenNode::get_attribute_location(Symbol attribute_name)
+{
+  attr_class* attribute = attribute_name_map[attribute_name];
+  assert(attribute != nullptr);
+
+  return std::find(attributes.cbegin(), attributes.cend(), attribute) - attributes.cbegin();
 }
 
 void CgenClassTable::code()
@@ -1221,58 +1247,58 @@ CgenNode::CgenNode(Class_ nd, Basicness bstatus, CgenClassTableP ct) :
 //
 //*****************************************************************
 
-void assign_class::code(ostream &s) {
+void assign_class::code(ostream &s, CgenNodeP cgen_node) {
 }
 
-void static_dispatch_class::code(ostream &s) {
+void static_dispatch_class::code(ostream &s, CgenNodeP cgen_node) {
 }
 
-void dispatch_class::code(ostream &s) {
+void dispatch_class::code(ostream &s, CgenNodeP cgen_node) {
 }
 
-void cond_class::code(ostream &s) {
+void cond_class::code(ostream &s, CgenNodeP cgen_node) {
 }
 
-void loop_class::code(ostream &s) {
+void loop_class::code(ostream &s, CgenNodeP cgen_node) {
 }
 
-void typcase_class::code(ostream &s) {
+void typcase_class::code(ostream &s, CgenNodeP cgen_node) {
 }
 
-void block_class::code(ostream &s) {
+void block_class::code(ostream &s, CgenNodeP cgen_node) {
 }
 
-void let_class::code(ostream &s) {
+void let_class::code(ostream &s, CgenNodeP cgen_node) {
 }
 
-void plus_class::code(ostream &s) {
+void plus_class::code(ostream &s, CgenNodeP cgen_node) {
 }
 
-void sub_class::code(ostream &s) {
+void sub_class::code(ostream &s, CgenNodeP cgen_node) {
 }
 
-void mul_class::code(ostream &s) {
+void mul_class::code(ostream &s, CgenNodeP cgen_node) {
 }
 
-void divide_class::code(ostream &s) {
+void divide_class::code(ostream &s, CgenNodeP cgen_node) {
 }
 
-void neg_class::code(ostream &s) {
+void neg_class::code(ostream &s, CgenNodeP cgen_node) {
 }
 
-void lt_class::code(ostream &s) {
+void lt_class::code(ostream &s, CgenNodeP cgen_node) {
 }
 
-void eq_class::code(ostream &s) {
+void eq_class::code(ostream &s, CgenNodeP cgen_node) {
 }
 
-void leq_class::code(ostream &s) {
+void leq_class::code(ostream &s, CgenNodeP cgen_node) {
 }
 
-void comp_class::code(ostream &s) {
+void comp_class::code(ostream &s, CgenNodeP cgen_node) {
 }
 
-void int_const_class::code(ostream& s)  
+void int_const_class::code(ostream& s, CgenNodeP cgen_node)  
 {
   //
   // Need to be sure we have an IntEntry *, not an arbitrary Symbol
@@ -1280,26 +1306,35 @@ void int_const_class::code(ostream& s)
   emit_load_int(ACC,inttable.lookup_string(token->get_string()),s);
 }
 
-void string_const_class::code(ostream& s)
+void string_const_class::code(ostream& s, CgenNodeP cgen_node)
 {
   emit_load_string(ACC,stringtable.lookup_string(token->get_string()),s);
 }
 
-void bool_const_class::code(ostream& s)
+void bool_const_class::code(ostream& s, CgenNodeP cgen_node)
 {
   emit_load_bool(ACC, BoolConst(val), s);
 }
 
-void new__class::code(ostream &s) {
+void new__class::code(ostream &s, CgenNodeP cgen_node) 
+{
+
 }
 
-void isvoid_class::code(ostream &s) {
+void isvoid_class::code(ostream &s, CgenNodeP cgen_node) 
+{
+
 }
 
-void no_expr_class::code(ostream &s) {
+void no_expr_class::code(ostream &s, CgenNodeP cgen_node) 
+{
+
 }
 
-void object_class::code(ostream &s) {
+void object_class::code(ostream &s, CgenNodeP cgen_node) 
+{
+  int attribute_location = cgen_node->get_attribute_location(get_name());
+  emit_load(ACC, 3 + attribute_location, SELF, s);
 }
 
 
