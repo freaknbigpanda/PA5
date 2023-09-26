@@ -116,15 +116,48 @@ Expression set_type(Symbol s) { type = s; return this; } \
 virtual void code(ostream&, CgenNode*) = 0; \
 virtual void dump_with_types(ostream&,int) = 0;  \
 void dump_type(ostream&, int);               \
-Expression_class() { type = (Symbol) NULL; }
+Expression_class() { type = (Symbol) NULL; }	\
 
 #define Expression_SHARED_EXTRAS           \
 void code(ostream&, CgenNode*); 			   \
 void dump_with_types(ostream&,int); 
 
-
 #define object_EXTRAS                                   \
 Symbol get_name() { return name; }
+
+#define plus_EXTRAS	\
+Expression get_lhs() { return e1; } \
+Expression get_rhs() { return e2; }
+
+#define sub_EXTRAS	\
+Expression get_lhs() { return e1; } \
+Expression get_rhs() { return e2; }
+
+#define mul_EXTRAS	\
+Expression get_lhs() { return e1; } \
+Expression get_rhs() { return e2; }
+
+#define divide_EXTRAS	\
+Expression get_lhs() { return e1; } \
+Expression get_rhs() { return e2; }
+
+#define neg_EXTRAS	\
+Expression get_rhs() { return e1; }
+
+#define lt_EXTRAS	\
+Expression get_lhs() { return e1; } \
+Expression get_rhs() { return e2; }
+
+#define eq_EXTRAS	\
+Expression get_lhs() { return e1; } \
+Expression get_rhs() { return e2; }
+
+#define leq_EXTRAS	\
+Expression get_lhs() { return e1; } \
+Expression get_rhs() { return e2; }
+
+#define comp_EXTRAS	\
+Expression get_rhs() { return e1; } \
 
 
 #endif

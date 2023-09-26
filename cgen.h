@@ -61,6 +61,8 @@ public:
    CgenNodeP root();
 };
 
+using AttrOwnerPair = std::pair<attr_class*, Symbol>;
+using MethodOwnerPair = std::pair<method_class*, Symbol>;
 
 class CgenNode : public class__class {
 private: 

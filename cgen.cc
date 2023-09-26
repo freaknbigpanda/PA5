@@ -722,26 +722,15 @@ void CgenClassTable::code_prototype_objects()
 {
   for(auto it = cgen_nodes_for_class.cbegin(); it != cgen_nodes_for_class.cend(); ++it)
   {
+    // Apparently for garbage collection, need -1 in object addression -1
+    str << WORD << "-1" << endl;
+
     CgenNode* current_node_ptr = (*it).second;
     emit_protobj_ref(current_node_ptr->get_name(), str);
     str << ":" << endl;
     str << WORD << current_node_ptr->get_tag() << endl;
     str << WORD << current_node_ptr->get_size() << endl;
     str << WORD << current_node_ptr->get_name() << DISPTAB_SUFFIX << endl;
-
-    // if (current_node_ptr->get_name() == Bool || current_node_ptr->get_name() == Str || current_node_ptr->get_name() == Int)
-    // {
-    //   //todo: no clue what this is for right now but coolc emits this for string bool and int proto objects
-    //   // The cool runtime system document writes the following 
-    //               /*For Int objects, the only attribute is the 32-bit value of the integer. For Bool objects, the only
-    //           attribute is the 32-bit value 1 or 0, representing either true or false. The first attribute of String objects
-    //           is an object pointer to an Int object representing the size of the string. The actual sequence of ASCII
-    //           characters of the string starts at the second attribute (offset 16), terminates with a 0, and is then padded
-    //           with 0’s to a word boundary*/
-    //   // But I still don't understand why the proto-object wouldn't be using a int_const0
-    //   // Don't really understand the relationship between proto objects and consts
-    //   str << WORD << "0" << endl;
-    // }
 
     std::vector<attr_class*> attributes = current_node_ptr->get_attributes();
     for (auto it = attributes.cbegin(); it != attributes.cend(); ++it)
@@ -770,11 +759,6 @@ void CgenClassTable::code_prototype_objects()
         str << "0";
       }
       str << endl;
-    }
-
-    if (current_node_ptr->get_name() != Main)
-    {
-      str << WORD << "-1" << endl;
     }
   }
 }
@@ -1271,31 +1255,100 @@ void block_class::code(ostream &s, CgenNodeP cgen_node) {
 void let_class::code(ostream &s, CgenNodeP cgen_node) {
 }
 
-void plus_class::code(ostream &s, CgenNodeP cgen_node) {
+static void emit_binary_op_prefix(Expression lhs, Expression rhs, ostream &s, CgenNodeP cgen_node)
+{
+  lhs->code(s, cgen_node);
+
+  // push lhs result to stack
+  emit_store(ACC, 0, SP, s);
+  // bump the stack pointer
+  emit_addiu(SP, SP, -1 * WORD_SIZE, s);
+
+  rhs->code(s, cgen_node);
+
+  // load the result from the lhs into T1
+  emit_load(T1, 1, SP, s);
 }
 
-void sub_class::code(ostream &s, CgenNodeP cgen_node) {
+void plus_class::code(ostream &s, CgenNodeP cgen_node) 
+{
+  emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
+
+  // add t1 + acc
+  emit_add(ACC, T1, ACC, s);
+
+  // return the stack pointer to its previous value
+  emit_addiu(SP, SP, WORD_SIZE, s);
 }
 
-void mul_class::code(ostream &s, CgenNodeP cgen_node) {
+void sub_class::code(ostream &s, CgenNodeP cgen_node) 
+{
+  emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
+
+  // sub T1 - ACC
+  emit_sub(ACC, T1, ACC, s);
+  emit_addiu(SP, SP, WORD_SIZE, s);
 }
 
-void divide_class::code(ostream &s, CgenNodeP cgen_node) {
+void mul_class::code(ostream &s, CgenNodeP cgen_node) 
+{
+  emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
+
+  // mul T1 * ACC
+  emit_mul(ACC, T1, ACC, s);
+  emit_addiu(SP, SP, WORD_SIZE, s);
 }
 
-void neg_class::code(ostream &s, CgenNodeP cgen_node) {
+void divide_class::code(ostream &s, CgenNodeP cgen_node) 
+{
+  emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
+
+  // mul T1 / ACC
+  emit_div(ACC, T1, ACC, s);
+  emit_addiu(SP, SP, WORD_SIZE, s);
 }
 
-void lt_class::code(ostream &s, CgenNodeP cgen_node) {
+void neg_class::code(ostream &s, CgenNodeP cgen_node) 
+{
 }
 
-void eq_class::code(ostream &s, CgenNodeP cgen_node) {
+void lt_class::code(ostream &s, CgenNodeP cgen_node) 
+{
+  
 }
 
-void leq_class::code(ostream &s, CgenNodeP cgen_node) {
+void eq_class::code(ostream &s, CgenNodeP cgen_node) 
+{
+  get_lhs()->code(s, cgen_node);
+  // Push result of LHS onto the stack
+  emit_store(ACC, 0, SP, s);
+  emit_addiu(SP, SP, -1 * WORD_SIZE, s);
+
+  get_rhs()->code(s, cgen_node);
+  // move RHS into T2
+  emit_move(T2, ACC, s);
+  // load LHS into T1
+  emit_load(T1, 1, SP, s);
+
+  // Value returned in ACC if true
+  emit_load_bool(ACC, BoolConst(1), s);
+
+  // Value return in ACC if false
+  emit_load_bool(A1, BoolConst(0), s);
+
+  // Jump and link to the compare method
+  emit_jal("equality_test", s);
+
+  // Restore the stack pointer
+  emit_addiu(SP, SP, WORD_SIZE, s);
 }
 
-void comp_class::code(ostream &s, CgenNodeP cgen_node) {
+void leq_class::code(ostream &s, CgenNodeP cgen_node) 
+{
+}
+
+void comp_class::code(ostream &s, CgenNodeP cgen_node) 
+{
 }
 
 void int_const_class::code(ostream& s, CgenNodeP cgen_node)  
