@@ -176,28 +176,6 @@ static void emit_load(char *dest_reg, int offset, char *source_reg, ostream& s)
     << endl;
 }
 
-// static void emit_callee_activation_record(std::set<SRegisters> used_s_registers, uint8_t number_of_parameters, ostream& s)
-// {
-//   static const std::map<SRegisters, std::string> registers_to_names = {{SRegisters::S0, "$s0"}, {SRegisters::S1, "$s1"}, 
-//   {SRegisters::S2, "$s2"}, {SRegisters::S3, "$s3"}, {SRegisters::S4, "$s4"}, {SRegisters::S5, "$s5"}, 
-//   {SRegisters::S6, "$s6"}, {SRegisters::S7, "$s7"}};
-
-//   // Restore the fp and ra registers to their state before we entered the method
-//   int offset = 0;
-//   emit_load(FP, offset++, SP, s);
-//   emit_load(RA, offset++, SP, s);
-
-//   // todo: might need to add this back later
-//   // for (auto it = used_s_registers.begin(); it != used_s_registers.end(); ++it)
-//   // {
-//   //   emit_load(registers_to_names.find(*it)->second.c_str(), offset++, SP, s);
-//   // }
-
-//   // subtract the stack pointer so that it is where it was before we entered the method, including the number of parameters that the caller pushed onto to the stack
-//   emit_addiu(SP, SP, (used_s_registers.size() + 2 + number_of_parameters) * WORD_SIZE, s);
-
-// }
-
 static void emit_store(const char *source_reg, int offset,const char *dest_reg, ostream& s)
 {
   s << SW << source_reg << " " << offset * WORD_SIZE << "(" << dest_reg << ")"
@@ -1266,13 +1244,19 @@ static void emit_binary_op_prefix(Expression lhs, Expression rhs, ostream &s, Cg
 
   rhs->code(s, cgen_node);
 
-  // load the result from the lhs into T1
-  emit_load(T1, 1, SP, s);
+  // load the memory address of the object into T2
+  emit_load(T2, 1, SP, s);
+
+  // load the int result from the lhs into T1
+  emit_load(T1, 3, T2, s);
 }
 
 void plus_class::code(ostream &s, CgenNodeP cgen_node) 
 {
   emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
+
+  // Load the int value into ACC
+  emit_load(ACC, 3, ACC, s);
 
   // add t1 + acc
   emit_add(ACC, T1, ACC, s);
