@@ -157,7 +157,10 @@ Expression get_lhs() { return e1; } \
 Expression get_rhs() { return e2; }
 
 #define comp_EXTRAS	\
-Expression get_rhs() { return e1; } \
+Expression get_rhs() { return e1; }
+
+#define isvoid_EXTRAS	\
+Expression get_rhs() { return e1; }
 
 
 #endif

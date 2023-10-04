@@ -79,6 +79,7 @@
 //
 // Opcodes
 //
+#define JUMP  "\tj\t"
 #define JALR  "\tjalr\t"  
 #define JAL   "\tjal\t"                 
 #define RET   "\tjr\t$ra\t"
@@ -90,6 +91,8 @@
 
 #define MOVE  "\tmove\t"
 #define NEG   "\tneg\t"
+#define ORI   "\tori\t"
+#define ANDI   "\tandi\t"
 #define ADD   "\tadd\t"
 #define ADDI  "\taddi\t"
 #define ADDU  "\taddu\t"
@@ -98,6 +101,8 @@
 #define MUL   "\tmul\t"
 #define SUB   "\tsub\t"
 #define SLL   "\tsll\t"
+#define SLT   "\tslt\t"
+#define SLTI   "\tslti\t"
 #define BEQZ  "\tbeqz\t"
 #define BRANCH   "\tb\t"
 #define BEQ      "\tbeq\t"

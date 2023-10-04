@@ -342,12 +342,10 @@ void comp_class::dump(ostream& stream, int n)
    e1->dump(stream, n+2);
 }
 
-
 Expression int_const_class::copy_Expression()
 {
    return new int_const_class(copy_Symbol(token));
 }
-
 
 void int_const_class::dump(ostream& stream, int n)
 {

@@ -144,18 +144,6 @@ void program_class::cgen(ostream &os)
   os << "\n# end of generated code\n";
 }
 
-// enum class SRegisters: uint8_t
-// {
-//   S0 = 0b00000001,
-//   S1 = 0b00000010,
-//   S2 = 0b00000100,
-//   S3 = 0b00001000,
-//   S4 = 0b00010000,
-//   S5 = 0b00100000,
-//   S6 = 0b01000000,
-//   S7 = 0b10000000
-// };
-
 //////////////////////////////////////////////////////////////////////////////
 //
 //  emit_* procedures
@@ -221,6 +209,15 @@ static void emit_neg(const char *dest, const char *src1, ostream& s)
 static void emit_add(const char *dest, const char *src1, const char *src2, ostream& s)
 { s << ADD << dest << " " << src1 << " " << src2 << endl; }
 
+static void emit_andi(const char *dest, const char *src1, int imm, ostream& s)
+{ s << ANDI << dest << " " << src1 << " " << imm << endl; }
+
+static void emit_and(const char *dest, const char *src1, const char *src2, ostream& s)
+{ s << ANDI << dest << " " << src1 << " " << src2 << endl; }
+
+static void emit_ori(const char *dest, const char *src1, int imm, ostream& s)
+{ s << ORI << dest << " " << src1 << " " << imm << endl; }
+
 static void emit_addu(const char *dest, const char *src1, const char *src2, ostream& s)
 { s << ADDU << dest << " " << src1 << " " << src2 << endl; }
 
@@ -238,6 +235,12 @@ static void emit_sub(const char *dest, const char *src1, const char *src2, ostre
 
 static void emit_sll(const char *dest, const char *src1, int num, ostream& s)
 { s << SLL << dest << " " << src1 << " " << num << endl; }
+
+static void emit_slt(const char *cmp_result, const char *lhs, const char *rhs, ostream& s)
+{ s << SLT << cmp_result << " " << lhs << " " << rhs << endl; }
+
+static void emit_slti(const char *cmp_result, const char *lhs, int imm, ostream& s)
+{ s << SLTI << cmp_result << " " << lhs << " " << imm << endl; }
 
 static void emit_jalr(const char *dest, ostream& s)
 { s << JALR << "\t" << dest << endl; }
@@ -270,6 +273,13 @@ static void emit_label_def(int l, ostream &s)
 {
   emit_label_ref(l,s);
   s << ":" << endl;
+}
+
+static void emit_jump(int label, ostream &s)
+{
+  s << JUMP;
+  emit_label_ref(label,s);
+  s << endl;
 }
 
 static void emit_beqz(char *source, int label, ostream &s)
@@ -1235,6 +1245,8 @@ void let_class::code(ostream &s, CgenNodeP cgen_node) {
 
 static void emit_binary_op_prefix(Expression lhs, Expression rhs, ostream &s, CgenNodeP cgen_node)
 {
+  // This function assumes that Int objects will be present in register ACC after evaluating both lhs and rhs expressions 
+
   lhs->code(s, cgen_node);
 
   // push lhs result to stack
@@ -1249,56 +1261,124 @@ static void emit_binary_op_prefix(Expression lhs, Expression rhs, ostream &s, Cg
 
   // load the int result from the lhs into T1
   emit_load(T1, 3, T2, s);
+
+  // Load the int result from the rhs into T2
+  emit_load(T2, 3, ACC, s);
+  
+  //T1 now stores the lhs int operand and T2 now stores the rhs int operand-
+}
+
+static void emit_object_allocation(Symbol return_type, ostream &s)
+{
+  /* Create a new return object on the heap, populate its data field with the value in ACC, and populate ACC with a pointer to that object
+      Note: Expects the raw result of the operand to be in register T2 */
+
+  // Load the proto object address into ACC
+  emit_partial_load_address(ACC, s);
+  emit_protobj_ref(return_type, s);
+  s << endl;
+
+  // Create the object on the heap
+  std::stringstream method_name;
+  emit_method_ref(Object, copy, method_name);
+  emit_jal(method_name.str().c_str(), s);
+
+  // Store the result in T2 into the object stored at ACC
+  emit_store(T2, 3, ACC, s);
+}
+
+static void emit_binary_op_suffix(Symbol return_type, ostream &s)
+{
+  // For bools we don't need to allocate a new object
+  if (return_type == Int) emit_object_allocation(return_type, s);
+
+  // return the stack pointer to its previous value
+  emit_addiu(SP, SP, WORD_SIZE, s);
 }
 
 void plus_class::code(ostream &s, CgenNodeP cgen_node) 
 {
   emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
 
-  // Load the int value into ACC
-  emit_load(ACC, 3, ACC, s);
+  // add T1 + T2
+  emit_add(T2, T1, T2, s);
 
-  // add t1 + acc
-  emit_add(ACC, T1, ACC, s);
-
-  // return the stack pointer to its previous value
-  emit_addiu(SP, SP, WORD_SIZE, s);
+  emit_binary_op_suffix(Int, s);
 }
 
 void sub_class::code(ostream &s, CgenNodeP cgen_node) 
 {
   emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
 
-  // sub T1 - ACC
-  emit_sub(ACC, T1, ACC, s);
-  emit_addiu(SP, SP, WORD_SIZE, s);
+  // sub T1 - T2
+  emit_sub(T2, T1, T2, s);
+
+  emit_binary_op_suffix(Int, s);
 }
 
 void mul_class::code(ostream &s, CgenNodeP cgen_node) 
 {
   emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
 
-  // mul T1 * ACC
-  emit_mul(ACC, T1, ACC, s);
-  emit_addiu(SP, SP, WORD_SIZE, s);
+  // mul T1 * T2
+  emit_mul(T2, T1, T2, s);
+  
+  emit_binary_op_suffix(Int, s);
 }
 
 void divide_class::code(ostream &s, CgenNodeP cgen_node) 
 {
   emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
 
-  // mul T1 / ACC
-  emit_div(ACC, T1, ACC, s);
-  emit_addiu(SP, SP, WORD_SIZE, s);
+  // mul T1 / T2
+  emit_div(T2, T1, T2, s);
+
+  emit_binary_op_suffix(Int, s);
 }
 
 void neg_class::code(ostream &s, CgenNodeP cgen_node) 
 {
+    get_rhs()->code(s, cgen_node);
+
+    // Load the int value into ACC
+    emit_load(ACC, 3, ACC, s);
+
+    // Load -1 into T1
+    emit_load_imm(T1, -1, s);
+
+    // Negate the int value by multiplying by -1
+    emit_mul(T2, ACC, T1, s);
+
+    // Create a new Int object on the heap and store the value of T2 in it
+    emit_object_allocation(Int, s);
 }
 
 void lt_class::code(ostream &s, CgenNodeP cgen_node) 
 {
-  
+  emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
+
+  emit_blt(T1, T2, 0, s);
+  emit_load_bool(ACC, BoolConst(0), s);
+  emit_jump(1, s);
+  emit_label_def(0, s);
+  emit_load_bool(ACC, BoolConst(1), s);
+  emit_label_def(1, s);
+
+  emit_binary_op_suffix(Bool, s);
+}
+
+void leq_class::code(ostream &s, CgenNodeP cgen_node) 
+{
+  emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
+
+  emit_bleq(T1, T2, 0, s);
+  emit_load_bool(ACC, BoolConst(0), s);
+  emit_jump(1, s);
+  emit_label_def(0, s);
+  emit_load_bool(ACC, BoolConst(1), s);
+  emit_label_def(1, s);
+
+  emit_binary_op_suffix(Bool, s);
 }
 
 void eq_class::code(ostream &s, CgenNodeP cgen_node) 
@@ -1327,12 +1407,25 @@ void eq_class::code(ostream &s, CgenNodeP cgen_node)
   emit_addiu(SP, SP, WORD_SIZE, s);
 }
 
-void leq_class::code(ostream &s, CgenNodeP cgen_node) 
-{
-}
-
+// Note: this is actually the not operator. No idea why it is called comp
 void comp_class::code(ostream &s, CgenNodeP cgen_node) 
 {
+  // this produces a bool value in acc
+  get_rhs()->code(s, cgen_node);
+
+  // Load the bool value into ACC
+  emit_load(ACC, 3, ACC, s);
+
+  // Inverts the bool object and stores result in T2. In other words if ACC < 1 sets ACC to 1 otherwise sets it to 0
+  emit_slti(T2, ACC, 1, s);
+
+  // If T2 is Zero then return BoolConst(0) object, otherwise return BoolConst(1) object
+  emit_beq(T2, ZERO, 0, s);
+  emit_load_bool(ACC, BoolConst(1), s);
+  emit_jump(1, s);
+  emit_label_def(0, s);
+  emit_load_bool(ACC, BoolConst(0), s);
+  emit_label_def(1, s);
 }
 
 void int_const_class::code(ostream& s, CgenNodeP cgen_node)  
@@ -1360,12 +1453,16 @@ void new__class::code(ostream &s, CgenNodeP cgen_node)
 
 void isvoid_class::code(ostream &s, CgenNodeP cgen_node) 
 {
+  get_rhs()->code(s, cgen_node);
 
+  emit_and(ACC, ACC, ZERO, s);
+
+  // todo: complete this
 }
 
 void no_expr_class::code(ostream &s, CgenNodeP cgen_node) 
 {
-
+  
 }
 
 void object_class::code(ostream &s, CgenNodeP cgen_node) 
