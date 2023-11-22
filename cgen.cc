@@ -379,63 +379,6 @@ static void emit_gc_check(char *source, ostream &s)
   s << JAL << "_gc_check" << endl;
 }
 
-// static void emit_callee_activation_record(/*std::set<SRegisters> used_s_registers,*/ Expression method_body, const int number_of_parameters, ostream& s)
-// {
-//   // setup a new frame pointer at the current stack pointer
-//   emit_move(FP, SP, s);
-  
-//   // store ra register on the stack because codegen for the method body may trample it
-//   emit_store(RA, 0, SP, s);
-//   emit_addiu(SP, SP, -1 * WORD_SIZE, s);
-
-//   // store register S0 on the stack because apparently this is required
-//   // todo: figure out why
-//   emit_store(SELF, 0, SP, s);
-//   emit_addiu(SP, SP, -1 *WORD_SIZE, s);
-  
-//   // save the value of SELF in aO
-//   emit_move(SELF, ACC, s);
-
-//   // emit code for the method body
-//   method_body->code(s);
-
-//   // restore s0/SELF register
-//   emit_load(SELF, 1, SP, s);
-
-//   // restore ra register
-//   emit_load(RA, 2, SP, s);
-  
-//   // restore old sp from before the method was called, number of parameters + 1 for ra, 1 for fp, and 1 for s0/SELF
-//   emit_addiu(SP, SP, (number_of_parameters + 3) * WORD_SIZE, s);
-
-//   // restore old frame pointer so that the function that called us will have the frame pointer back
-//   emit_load(FP, 0, SP, s);
-
-//   // jump to address in ra
-//   emit_return(s);
-// }
-
-// static void emit_caller_activation_record(Expressions parameters, const std::string& method_name, ostream& s)
-// {
-//   // todo: how do we deal with local variables?
-
-//   // save value of frame pointer so that it can be restored after function exit
-//   emit_store(FP, 0, SP, s);
-//   emit_addiu(SP, SP, -1 * WORD_SIZE, s);
-
-//   // save actual parameters in reverse order, the first parameter will be at the lowest address
-//   for(int i = parameters->first(); parameters->more(i); i = parameters->next(i))
-//   {
-//       parameters->nth(i)->code(s);
-//       emit_store(ACC, 0, SP, s);
-//       emit_addiu(SP, SP, -1 * WORD_SIZE, s);
-//   }
-
-//   // jal instruction to jump to the method
-//   emit_jal(method_name.c_str(), s);
-// }
-
-
 ///////////////////////////////////////////////////////////////////////////////
 //
 // coding strings, ints, and booleans
@@ -710,7 +653,9 @@ void CgenClassTable::code_prototype_objects()
 {
   for(auto it = cgen_nodes_for_class.cbegin(); it != cgen_nodes_for_class.cend(); ++it)
   {
-    // Apparently for garbage collection, need -1 in object addression -1
+    if ((*it).second->get_name() == Bool) continue; // No need for bool protoobject since we already have the true and false consts
+
+    // Apparently for garbage collection, need -1 in object address -4 (see cool-runtime.pdf)
     str << WORD << "-1" << endl;
 
     CgenNode* current_node_ptr = (*it).second;
@@ -768,6 +713,8 @@ void CgenClassTable::code_obj_table()
   str << CLASSOBJTAB << ":" << endl;
   for(auto it = cgen_nodes_for_class.cbegin(); it != cgen_nodes_for_class.cend(); ++it)
   {
+    if ((*it).second->get_name() == Bool) continue; // No bool proto object exists since we already have the true and false consts
+
     str << WORD;
     CgenNode* current_node_ptr = (*it).second;
     emit_protobj_ref(current_node_ptr->get_name(), str);
@@ -831,12 +778,36 @@ void CgenClassTable::code_object_initializers()
     for (auto it = attributes.cbegin(); it != attributes.cend(); ++it)
     {
       attr_class* attribute = *it;
-      
-      // Emit code for attribute initialization
-      attribute->get_expression()->code(str, current_node_ptr);
+
+      Expression init_expr = attribute->get_expression();
+      Symbol attr_type = attribute->get_declared_type();
+      bool isBasic = (attr_type == Int || attr_type == Str);
+
+      // If the type is an Int or String and there is no expression init with default proto-obj, otherwise emit code for the initialization
+      if (dynamic_cast<no_expr_class*>(init_expr) != nullptr && isBasic) 
+      {
+        // If we don't have an expression init the attribute to the value of the appropiate proto obj
+        // Load the proto object address into ACC
+        // Note that for non-basic types we just let them initialize to void
+        emit_partial_load_address(ACC, str);
+        emit_protobj_ref(attr_type, str);
+        str << endl;
+      }
+      else if (dynamic_cast<no_expr_class*>(init_expr) != nullptr && attr_type == Bool)
+      {
+        // If the type is a bool there is no Bool_protObj so just load a ref to boolconst_false into ACC
+        emit_load_bool(ACC, BoolConst(0), str);
+      }
+      else
+      { 
+        // Emit code for attribute initialization
+        // Note: this will copy zero into ACC for no_expr_class
+        attribute->get_expression()->code(str, current_node_ptr);
+      }
 
       // Store the result of the attribute initialization in the correct location in the heap
       emit_store(ACC, attribute_index + 3, SELF, str);
+      
       attribute_index++;
     }
 
@@ -1111,6 +1082,9 @@ void CgenNode::set_size_attributes_methods()
 
   while (current_parent != nullptr) {
     Features features = current_parent->features;
+    std::vector<attr_class*> new_attributes;
+    std::vector<method_class*> new_methods;
+
     for (int i = features->first(); features->more(i); i = features->next(i))
     {
       Feature feature = features->nth(i);
@@ -1118,21 +1092,26 @@ void CgenNode::set_size_attributes_methods()
       {
         size++;
         attr_class* attribute = static_cast<attr_class*>(feature);
-        attributes.push_back(attribute);
+        new_attributes.push_back(attribute);
         attribute_name_map[attribute->get_name()] = attribute;
       }
       else
       {
         method_class* method = static_cast<method_class*>(feature);
-        methods.push_back(method);
+        new_methods.push_back(method);
         method_name_map[method->get_name()] = method;
       }
     }
+
+    // We want the methods and attributes to be ordered starting with Object and then progressing down the inheritance tree so we need to do this shuffling
+    new_attributes.insert(new_attributes.end(), attributes.begin(), attributes.end());
+    attributes = new_attributes;
+    new_attributes = std::vector<attr_class*>();
+    new_methods.insert(new_methods.end(), methods.begin(), methods.end());
+    methods = new_methods;
+    new_methods = std::vector<method_class*>();
     current_parent = current_parent->parentnd;
   }
-  // Reversing because we want the attrbutes and methods for the furthest parent (i.e. Object class) listed first
-  std::reverse(methods.begin(), methods.end());
-  std::reverse(attributes.begin(), attributes.end());
 }
 
 int CgenNode::get_attribute_location(Symbol attribute_name)
@@ -1286,6 +1265,9 @@ static void emit_object_allocation(Symbol return_type, ostream &s)
   // Store the result in T2 into the object stored at ACC
   emit_store(T2, 3, ACC, s);
 }
+
+// Why do the results of expressions get allocated on the heap? How does that make any sense?
+// Why couldn't we allocate the result of expressions on the stack? Binary ops are all 
 
 static void emit_binary_op_suffix(Symbol return_type, ostream &s)
 {
@@ -1455,14 +1437,18 @@ void isvoid_class::code(ostream &s, CgenNodeP cgen_node)
 {
   get_rhs()->code(s, cgen_node);
 
-  emit_and(ACC, ACC, ZERO, s);
-
-  // todo: complete this
+  emit_beq(ACC, ZERO, 0, s);
+  emit_load_bool(ACC, BoolConst(0), s);
+  emit_jump(1, s);
+  emit_label_def(0, s);
+  emit_load_bool(ACC, BoolConst(1), s);
+  emit_label_def(1, s);
 }
 
 void no_expr_class::code(ostream &s, CgenNodeP cgen_node) 
 {
-  
+  // Load void into ACC for no_expr 
+  emit_load_imm(ACC, 0, s);
 }
 
 void object_class::code(ostream &s, CgenNodeP cgen_node) 
