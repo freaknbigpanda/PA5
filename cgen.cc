@@ -47,7 +47,7 @@ extern int cgen_debug;
 // as fixed names used by the runtime system.
 //
 //////////////////////////////////////////////////////////////////////
-Symbol 
+Symbol
        arg,
        arg2,
        Bool,
@@ -92,7 +92,7 @@ static void initialize_constants(void)
   length      = idtable.add_string("length");
   Main        = idtable.add_string("Main");
   main_meth   = idtable.add_string("main");
-//   _no_class is a symbol that can't be the name of any 
+//   _no_class is a symbol that can't be the name of any
 //   user-defined class.
   No_class    = idtable.add_string("_no_class");
   No_type     = idtable.add_string("_no_type");
@@ -133,7 +133,7 @@ BoolConst truebool(TRUE);
 //
 //*********************************************************
 
-void program_class::cgen(ostream &os) 
+void program_class::cgen(ostream &os)
 {
   // spim wants comments to start with '#'
   os << "# start of generated code\n";
@@ -160,7 +160,7 @@ void program_class::cgen(ostream &os)
 
 static void emit_load(char *dest_reg, int offset, char *source_reg, ostream& s)
 {
-  s << LW << dest_reg << " " << offset * WORD_SIZE << "(" << source_reg << ")" 
+  s << LW << dest_reg << " " << offset * WORD_SIZE << "(" << source_reg << ")"
     << endl;
 }
 
@@ -432,11 +432,11 @@ void StringEntry::code_def(ostream& s, int stringclasstag)
 
 //
 // StrTable::code_string
-// Generate a string object definition for every string constant in the 
+// Generate a string object definition for every string constant in the
 // stringtable.
 //
 void StrTable::code_string_table(ostream& s, int stringclasstag)
-{  
+{
   for (List<StringEntry> *l = tbl; l; l = l->tl())
     l->hd()->code_def(s,stringclasstag);
 }
@@ -489,7 +489,7 @@ void BoolConst::code_ref(ostream& s) const
 {
   s << BOOLCONST_PREFIX << val;
 }
-  
+
 //
 // Emit code for a constant Bool.
 // You should fill in the code naming the dispatch table.
@@ -548,10 +548,10 @@ void CgenClassTable::code_global_data()
   //
   str << INTTAG << LABEL
       << WORD << intclasstag << endl;
-  str << BOOLTAG << LABEL 
+  str << BOOLTAG << LABEL
       << WORD << boolclasstag << endl;
-  str << STRINGTAG << LABEL 
-      << WORD << stringclasstag << endl;    
+  str << STRINGTAG << LABEL
+      << WORD << stringclasstag << endl;
 }
 
 
@@ -565,7 +565,7 @@ void CgenClassTable::code_global_data()
 void CgenClassTable::code_global_text()
 {
   str << GLOBAL << HEAP_START << endl
-      << HEAP_START << LABEL 
+      << HEAP_START << LABEL
       << WORD << 0 << endl
       << "\t.text" << endl
       << GLOBAL;
@@ -665,10 +665,10 @@ void CgenClassTable::code_prototype_objects()
     str << WORD << current_node_ptr->get_size() << endl;
     str << WORD << current_node_ptr->get_name() << DISPTAB_SUFFIX << endl;
 
-    std::vector<attr_class*> attributes = current_node_ptr->get_attributes();
+    std::vector<AttrOwnerPair> attributes = current_node_ptr->get_attributes();
     for (auto it = attributes.cbegin(); it != attributes.cend(); ++it)
     {
-      attr_class* attribute = *it;
+      attr_class* attribute = (*it).first;
 
       str << WORD;
       Symbol attribute_type = attribute->get_declared_type();
@@ -676,7 +676,7 @@ void CgenClassTable::code_prototype_objects()
       {
         IntEntry* const_entry = inttable.lookup_string("0");
         const_entry->code_ref(str);
-      } 
+      }
       else if (attribute_type == Bool)
       {
         falsebool.code_ref(str);
@@ -734,16 +734,17 @@ void CgenClassTable::code_dispatch_table()
     emit_disptable_ref(current_node_ptr->get_name(), str);
     str << ":" << endl;
 
-    std::vector<method_class*> methods = current_node_ptr->get_methods();
+    std::vector<MethodOwnerPair> methods = current_node_ptr->get_methods();
     for (auto it = methods.cbegin(); it != methods.cend(); ++it)
     {
       str << WORD;
-      emit_method_ref(current_node_ptr->get_name(), (*it)->get_name(), str);
+      emit_method_ref((*it).second, (*it).first->get_name(), str);
       str << endl;
     }
   }
 }
 
+// todo: Make sure to test initialization of attributes that reference other attributes of the same class
 void CgenClassTable::code_object_initializers()
 {
   for(auto it = cgen_nodes_for_class.cbegin(); it != cgen_nodes_for_class.cend(); ++it)
@@ -759,13 +760,13 @@ void CgenClassTable::code_object_initializers()
     emit_store(FP, 3, SP, str);
     emit_store(SELF, 2, SP, str);
     emit_store(RA, 1, SP, str);
-    
+
     // the stack pointer now points to unused stack memory, set the FP to be 1 word before
     emit_addiu(FP, SP, 4, str);
 
     // Save the value of self into register S0
     emit_move(SELF, ACC, str);
-    if (current_node_ptr->get_name() != Object) 
+    if (current_node_ptr->get_name() != Object)
     {
       std::stringstream init_ref;
       emit_init_ref(current_node_ptr->get_parent(), init_ref);
@@ -773,18 +774,18 @@ void CgenClassTable::code_object_initializers()
     }
 
     // Initializing attributes
-    std::vector<attr_class*> attributes = current_node_ptr->get_attributes();
+    std::vector<AttrOwnerPair> attributes = current_node_ptr->get_attributes();
     int attribute_index = 0;
     for (auto it = attributes.cbegin(); it != attributes.cend(); ++it)
     {
-      attr_class* attribute = *it;
+      attr_class* attribute = (*it).first;
 
       Expression init_expr = attribute->get_expression();
       Symbol attr_type = attribute->get_declared_type();
       bool isBasic = (attr_type == Int || attr_type == Str);
 
-      // If the type is an Int or String and there is no expression init with default proto-obj, otherwise emit code for the initialization
-      if (dynamic_cast<no_expr_class*>(init_expr) != nullptr && isBasic) 
+      // If the type is an Int or String and there is no expression, init with default proto-obj, otherwise emit code for the initialization expression
+      if (dynamic_cast<no_expr_class*>(init_expr) != nullptr && isBasic)
       {
         // If we don't have an expression init the attribute to the value of the appropiate proto obj
         // Load the proto object address into ACC
@@ -799,7 +800,7 @@ void CgenClassTable::code_object_initializers()
         emit_load_bool(ACC, BoolConst(0), str);
       }
       else
-      { 
+      {
         // Emit code for attribute initialization
         // Note: this will copy zero into ACC for no_expr_class
         attribute->get_expression()->code(str, current_node_ptr);
@@ -807,7 +808,7 @@ void CgenClassTable::code_object_initializers()
 
       // Store the result of the attribute initialization in the correct location in the heap
       emit_store(ACC, attribute_index + 3, SELF, str);
-      
+
       attribute_index++;
     }
 
@@ -828,23 +829,25 @@ void CgenClassTable::code_object_methods()
   {
     CgenNodeP current_node_ptr = (*it).second;
     // We don't need to generate methods for basic classes since it has already been done
-    if (current_node_ptr->basic()) continue; 
+    if (current_node_ptr->basic()) continue;
 
-    std::vector<method_class*> methods = current_node_ptr->get_methods();
+    std::vector<MethodOwnerPair> methods = current_node_ptr->get_methods();
     for (auto it = methods.cbegin(); it != methods.cend(); ++it)
     {
+      // We don't need to emit method definitions for methods that are previously defined by a parent class
+      if ((*it).second != current_node_ptr->get_name()) continue;
 
-      method_class* method = *it;
+      method_class* method = (*it).first;
       emit_method_ref(current_node_ptr->get_name(), method->get_name(), str);
       str << ":" << endl;
-     
+
       Formals parameters = method->get_parameters();
 
       // **** Begin method code generation ****
 
       // setup a new frame pointer at the current stack pointer
       emit_move(FP, SP, str);
-      
+
       // store ra register on the stack because codegen for the method body may trample it
       emit_store(RA, 0, SP, str);
       emit_addiu(SP, SP, -1 * WORD_SIZE, str);
@@ -852,7 +855,7 @@ void CgenClassTable::code_object_methods()
       // store register S0 on the stack because apparently this is required by the cool runtime system
       emit_store(SELF, 0, SP, str);
       emit_addiu(SP, SP, -1 *WORD_SIZE, str);
-      
+
       // save the value of self stored in aO to register s0
       emit_move(SELF, ACC, str);
 
@@ -864,7 +867,7 @@ void CgenClassTable::code_object_methods()
 
       // restore ra register
       emit_load(RA, 2, SP, str);
-      
+
       // restore old sp from before the method was called, number of parameters + 1 for ra, 1 for fp, and 1 for s0/SELF
       emit_addiu(SP, SP, (parameters->len() + 3) * WORD_SIZE, str);
 
@@ -904,7 +907,7 @@ void CgenClassTable::install_basic_classes()
 	new CgenNode(class_(prim_slot,No_class,nil_Features(),filename),
 			    Basic,this));
 
-// 
+//
 // The Object class has no parent class. Its methods are
 //        cool_abort() : Object    aborts the program
 //        type_name() : Str        returns a string representation of class name
@@ -915,7 +918,7 @@ void CgenClassTable::install_basic_classes()
 //
   install_class(
    new CgenNode(
-    class_(Object, 
+    class_(Object,
 	   No_class,
 	   append_Features(
            append_Features(
@@ -925,7 +928,7 @@ void CgenClassTable::install_basic_classes()
 	   filename),
     Basic,this));
 
-// 
+//
 // The IO class inherits from Object. Its methods are
 //        out_string(Str) : SELF_TYPE          writes a string to the output
 //        out_int(Int) : SELF_TYPE               "    an int    "  "     "
@@ -934,7 +937,7 @@ void CgenClassTable::install_basic_classes()
 //
    install_class(
     new CgenNode(
-     class_(IO, 
+     class_(IO,
             Object,
             append_Features(
             append_Features(
@@ -945,16 +948,16 @@ void CgenClassTable::install_basic_classes()
                         SELF_TYPE, no_expr()))),
             single_Features(method(in_string, nil_Formals(), Str, no_expr()))),
             single_Features(method(in_int, nil_Formals(), Int, no_expr()))),
-	   filename),	    
+	   filename),
     Basic,this));
 
 //
 // The Int class has no methods and only a single attribute, the
-// "val" for the integer. 
+// "val" for the integer.
 //
    install_class(
     new CgenNode(
-     class_(Int, 
+     class_(Int,
 	    Object,
             single_Features(attr(val, prim_slot, no_expr())),
 	    filename),
@@ -975,10 +978,10 @@ void CgenClassTable::install_basic_classes()
 //       length() : Int                       length of the string
 //       concat(arg: Str) : Str               string concatenation
 //       substr(arg: Int, arg2: Int): Str     substring
-//       
+//
    install_class(
     new CgenNode(
-      class_(Str, 
+      class_(Str,
 	     Object,
              append_Features(
              append_Features(
@@ -987,14 +990,14 @@ void CgenClassTable::install_basic_classes()
              single_Features(attr(val, Int, no_expr())),
             single_Features(attr(str_field, prim_slot, no_expr()))),
             single_Features(method(length, nil_Formals(), Int, no_expr()))),
-            single_Features(method(concat, 
+            single_Features(method(concat,
 				   single_Formals(formal(arg, Str)),
-				   Str, 
+				   Str,
 				   no_expr()))),
-	    single_Features(method(substr, 
-				   append_Formals(single_Formals(formal(arg, Int)), 
+	    single_Features(method(substr,
+				   append_Formals(single_Formals(formal(arg, Int)),
 						  single_Formals(formal(arg2, Int))),
-				   Str, 
+				   Str,
 				   no_expr()))),
 	     filename),
         Basic,this));
@@ -1012,7 +1015,7 @@ void CgenClassTable::install_class(CgenNodeP nd)
 
   if (probe(name))
     {
-      return; // todo: not sure when this would get hit 
+      return; // todo: not sure when this would get hit
     }
 
   // The class name is legal, so add it to the list of classes
@@ -1082,8 +1085,8 @@ void CgenNode::set_size_attributes_methods()
 
   while (current_parent != nullptr) {
     Features features = current_parent->features;
-    std::vector<attr_class*> new_attributes;
-    std::vector<method_class*> new_methods;
+    std::vector<AttrOwnerPair> new_attributes = std::vector<AttrOwnerPair>();
+    std::vector<MethodOwnerPair> new_methods = std::vector<MethodOwnerPair>();
 
     for (int i = features->first(); features->more(i); i = features->next(i))
     {
@@ -1092,32 +1095,34 @@ void CgenNode::set_size_attributes_methods()
       {
         size++;
         attr_class* attribute = static_cast<attr_class*>(feature);
-        new_attributes.push_back(attribute);
-        attribute_name_map[attribute->get_name()] = attribute;
+        AttrOwnerPair attribute_owner_pair = { attribute, current_parent->get_name() };
+        new_attributes.push_back(attribute_owner_pair);
+        attribute_name_map[attribute->get_name()] = attribute_owner_pair;
       }
       else
       {
         method_class* method = static_cast<method_class*>(feature);
-        new_methods.push_back(method);
-        method_name_map[method->get_name()] = method;
+        MethodOwnerPair method_owner_pair = { method, current_parent->get_name() };
+        new_methods.push_back(method_owner_pair);
+        method_name_map[method->get_name()] = method_owner_pair;
       }
     }
 
     // We want the methods and attributes to be ordered starting with Object and then progressing down the inheritance tree so we need to do this shuffling
     new_attributes.insert(new_attributes.end(), attributes.begin(), attributes.end());
     attributes = new_attributes;
-    new_attributes = std::vector<attr_class*>();
+
     new_methods.insert(new_methods.end(), methods.begin(), methods.end());
     methods = new_methods;
-    new_methods = std::vector<method_class*>();
+
     current_parent = current_parent->parentnd;
   }
 }
 
 int CgenNode::get_attribute_location(Symbol attribute_name)
 {
-  attr_class* attribute = attribute_name_map[attribute_name];
-  assert(attribute != nullptr);
+  AttrOwnerPair attribute = attribute_name_map[attribute_name];
+  assert(attribute.first != nullptr);
 
   return std::find(attributes.cbegin(), attributes.cend(), attribute) - attributes.cbegin();
 }
@@ -1159,7 +1164,7 @@ int CgenClassTable::get_next_class_tag(Symbol class_name)
 {
   if (class_name == Bool) return boolclasstag;
   else if (class_name == Int) return intclasstag;
-  else if (class_name == Str) return stringclasstag; 
+  else if (class_name == Str) return stringclasstag;
   else return nonbasicclasstag++;
 }
 
@@ -1180,7 +1185,7 @@ CgenNode::CgenNode(Class_ nd, Basicness bstatus, CgenClassTableP ct) :
    parentnd(NULL),
    children(NULL),
    basic_status(bstatus)
-{ 
+{
    string_entry = stringtable.add_string(name->get_string()); // Add class name to string table
    tag = ct->get_next_class_tag(nd->get_name());
 
@@ -1224,7 +1229,7 @@ void let_class::code(ostream &s, CgenNodeP cgen_node) {
 
 static void emit_binary_op_prefix(Expression lhs, Expression rhs, ostream &s, CgenNodeP cgen_node)
 {
-  // This function assumes that Int objects will be present in register ACC after evaluating both lhs and rhs expressions 
+  // This function assumes that Int objects will be present in register ACC after evaluating both lhs and rhs expressions
 
   lhs->code(s, cgen_node);
 
@@ -1243,7 +1248,7 @@ static void emit_binary_op_prefix(Expression lhs, Expression rhs, ostream &s, Cg
 
   // Load the int result from the rhs into T2
   emit_load(T2, 3, ACC, s);
-  
+
   //T1 now stores the lhs int operand and T2 now stores the rhs int operand-
 }
 
@@ -1267,7 +1272,7 @@ static void emit_object_allocation(Symbol return_type, ostream &s)
 }
 
 // Why do the results of expressions get allocated on the heap? How does that make any sense?
-// Why couldn't we allocate the result of expressions on the stack? Binary ops are all 
+// Why couldn't we allocate the result of expressions on the stack? Binary ops are all
 
 static void emit_binary_op_suffix(Symbol return_type, ostream &s)
 {
@@ -1278,7 +1283,7 @@ static void emit_binary_op_suffix(Symbol return_type, ostream &s)
   emit_addiu(SP, SP, WORD_SIZE, s);
 }
 
-void plus_class::code(ostream &s, CgenNodeP cgen_node) 
+void plus_class::code(ostream &s, CgenNodeP cgen_node)
 {
   emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
 
@@ -1288,7 +1293,7 @@ void plus_class::code(ostream &s, CgenNodeP cgen_node)
   emit_binary_op_suffix(Int, s);
 }
 
-void sub_class::code(ostream &s, CgenNodeP cgen_node) 
+void sub_class::code(ostream &s, CgenNodeP cgen_node)
 {
   emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
 
@@ -1298,17 +1303,17 @@ void sub_class::code(ostream &s, CgenNodeP cgen_node)
   emit_binary_op_suffix(Int, s);
 }
 
-void mul_class::code(ostream &s, CgenNodeP cgen_node) 
+void mul_class::code(ostream &s, CgenNodeP cgen_node)
 {
   emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
 
   // mul T1 * T2
   emit_mul(T2, T1, T2, s);
-  
+
   emit_binary_op_suffix(Int, s);
 }
 
-void divide_class::code(ostream &s, CgenNodeP cgen_node) 
+void divide_class::code(ostream &s, CgenNodeP cgen_node)
 {
   emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
 
@@ -1318,7 +1323,7 @@ void divide_class::code(ostream &s, CgenNodeP cgen_node)
   emit_binary_op_suffix(Int, s);
 }
 
-void neg_class::code(ostream &s, CgenNodeP cgen_node) 
+void neg_class::code(ostream &s, CgenNodeP cgen_node)
 {
     get_rhs()->code(s, cgen_node);
 
@@ -1335,7 +1340,7 @@ void neg_class::code(ostream &s, CgenNodeP cgen_node)
     emit_object_allocation(Int, s);
 }
 
-void lt_class::code(ostream &s, CgenNodeP cgen_node) 
+void lt_class::code(ostream &s, CgenNodeP cgen_node)
 {
   emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
 
@@ -1349,7 +1354,7 @@ void lt_class::code(ostream &s, CgenNodeP cgen_node)
   emit_binary_op_suffix(Bool, s);
 }
 
-void leq_class::code(ostream &s, CgenNodeP cgen_node) 
+void leq_class::code(ostream &s, CgenNodeP cgen_node)
 {
   emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
 
@@ -1363,7 +1368,7 @@ void leq_class::code(ostream &s, CgenNodeP cgen_node)
   emit_binary_op_suffix(Bool, s);
 }
 
-void eq_class::code(ostream &s, CgenNodeP cgen_node) 
+void eq_class::code(ostream &s, CgenNodeP cgen_node)
 {
   get_lhs()->code(s, cgen_node);
   // Push result of LHS onto the stack
@@ -1390,7 +1395,7 @@ void eq_class::code(ostream &s, CgenNodeP cgen_node)
 }
 
 // Note: this is actually the not operator. No idea why it is called comp
-void comp_class::code(ostream &s, CgenNodeP cgen_node) 
+void comp_class::code(ostream &s, CgenNodeP cgen_node)
 {
   // this produces a bool value in acc
   get_rhs()->code(s, cgen_node);
@@ -1410,7 +1415,7 @@ void comp_class::code(ostream &s, CgenNodeP cgen_node)
   emit_label_def(1, s);
 }
 
-void int_const_class::code(ostream& s, CgenNodeP cgen_node)  
+void int_const_class::code(ostream& s, CgenNodeP cgen_node)
 {
   //
   // Need to be sure we have an IntEntry *, not an arbitrary Symbol
@@ -1428,12 +1433,26 @@ void bool_const_class::code(ostream& s, CgenNodeP cgen_node)
   emit_load_bool(ACC, BoolConst(val), s);
 }
 
-void new__class::code(ostream &s, CgenNodeP cgen_node) 
+void new__class::code(ostream &s, CgenNodeP cgen_node)
 {
+  // todo: implement support for SELF_TYPE
 
+  // Load the correct proto-object into ACC
+  emit_partial_load_address(ACC, s);
+  emit_protobj_ref(get_type_name(), s);
+  s << endl;
+
+  // Copy the proto-object to the heap
+  // todo: don't really like this since if the method name changed this would break
+  emit_jal("Object.copy", s);
+
+  // Invoke initialization method on the object that we just allocated
+  std::stringstream init_method_ref;
+  emit_init_ref(get_type_name(), init_method_ref);
+  emit_jal(init_method_ref.str().c_str(), s);
 }
 
-void isvoid_class::code(ostream &s, CgenNodeP cgen_node) 
+void isvoid_class::code(ostream &s, CgenNodeP cgen_node)
 {
   get_rhs()->code(s, cgen_node);
 
@@ -1445,13 +1464,13 @@ void isvoid_class::code(ostream &s, CgenNodeP cgen_node)
   emit_label_def(1, s);
 }
 
-void no_expr_class::code(ostream &s, CgenNodeP cgen_node) 
+void no_expr_class::code(ostream &s, CgenNodeP cgen_node)
 {
-  // Load void into ACC for no_expr 
+  // Load void into ACC for no_expr
   emit_load_imm(ACC, 0, s);
 }
 
-void object_class::code(ostream &s, CgenNodeP cgen_node) 
+void object_class::code(ostream &s, CgenNodeP cgen_node)
 {
   int attribute_location = cgen_node->get_attribute_location(get_name());
   emit_load(ACC, 3 + attribute_location, SELF, s);

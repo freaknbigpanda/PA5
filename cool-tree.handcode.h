@@ -162,5 +162,8 @@ Expression get_rhs() { return e1; }
 #define isvoid_EXTRAS	\
 Expression get_rhs() { return e1; }
 
+#define new__EXTRAS	\
+Symbol get_type_name() { return type_name; }
+
 
 #endif

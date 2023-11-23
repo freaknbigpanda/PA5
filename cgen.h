@@ -74,10 +74,10 @@ private:
    int size = -1;
    StringEntryP string_entry = nullptr;
 
-   std::vector<method_class*> methods;
-   std::map<Symbol, method_class*> method_name_map;
-   std::vector<attr_class*> attributes;
-   std::map<Symbol, attr_class*> attribute_name_map;
+   std::vector<MethodOwnerPair> methods;
+   std::map<Symbol, MethodOwnerPair> method_name_map;
+   std::vector<AttrOwnerPair> attributes;
+   std::map<Symbol, AttrOwnerPair> attribute_name_map;
 
 public:
    CgenNode(Class_ c,
@@ -94,8 +94,8 @@ public:
    StringEntryP get_string_entry() { return string_entry; }
    void set_size_attributes_methods();
    int get_attribute_location(Symbol attribute_name);
-   std::vector<method_class*> get_methods() const { return methods; }
-   std::vector<attr_class*> get_attributes() const { return attributes; }
+   std::vector<MethodOwnerPair> get_methods() const { return methods; }
+   std::vector<AttrOwnerPair> get_attributes() const { return attributes; }
 };
 
 class BoolConst 
