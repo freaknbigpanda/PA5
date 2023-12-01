@@ -6,6 +6,16 @@
 #include "cool-tree.h"
 #include "symtab.h"
 
+//////////////////////////////////////////////////////////////////////
+//
+// Symbols
+//
+// For convenience, a large number of symbols are predefined here.
+// These symbols include the primitive type and method names, as well
+// as fixed names used by the runtime system.
+//
+//////////////////////////////////////////////////////////////////////
+
 enum Basicness     {Basic, NotBasic};
 #define TRUE 1
 #define FALSE 0
@@ -107,4 +117,9 @@ class BoolConst
   void code_def(ostream&, int boolclasstag);
   void code_ref(ostream&) const;
 };
+
+static char *gc_init_names[] =
+  { "_NoGC_Init", "_GenGC_Init", "_ScnGC_Init" };
+static char *gc_collect_names[] =
+  { "_NoGC_Collect", "_GenGC_Collect", "_ScnGC_Collect" };
 

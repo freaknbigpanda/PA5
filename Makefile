@@ -7,8 +7,8 @@ AR= gar
 ARCHIVE_NEW= -cr
 RANLIB= gar -qs
 
-SRC= cgen.cc cgen.h cgen_supp.cc cool-tree.h cool-tree.handcode.h emit.h example.cl README
-CSRC= cgen-phase.cc utilities.cc stringtab.cc dumptype.cc tree.cc cool-tree.cc ast-lex.cc ast-parse.cc handle_flags.cc 
+SRC= cgen.cc cgen.h cgen_supp.cc cool-tree.h cool-tree.handcode.h emit.h emit.cc example.cl README
+CSRC= cgen-phase.cc utilities.cc stringtab.cc dumptype.cc tree.cc cool-tree.cc ast-lex.cc ast-parse.cc handle_flags.cc emit.cc
 TSRC= mycoolc
 CGEN=
 HGEN= 
@@ -64,7 +64,7 @@ ${HSRC}:
 	-ln -s ${CLASSDIR}/include/PA${ASSN}/$@ $@
 
 clean :
-	-rm -f ${OUTPUT} *.s core ${OBJS} cgen parser semant lexer *~ *.a *.o
+	-rm -f ${OUTPUT} *.s core ${OBJS} cgen parser semant lexer *~ *.a *.o *.d
 
 clean-compile:
 	@-rm -f core ${OBJS} ${LSRC}

@@ -213,16 +213,16 @@ void dump_cool_token(ostream& out, int lineno, int token, YYSTYPE yylval)
 //
 // Decstations don't have strdup in the library.
 //
-char *strdup(const char *s)
-{
-  char *news;
+// char *strdup(const char *s)
+// {
+//   char *news;
 
-  if (s == NULL) return(NULL);
+//   if (s == nullptr) return(nullptr);
 
-  news = (char *)malloc(strlen(s)+1);
-  strcpy(news, s);
-  return(news);
-}
+//   news = (char *)malloc(strlen(s)+1);
+//   strcpy(news, s);
+//   return(news);
+// }
 
 ///////////////////////////////////////////////////////////////////////////
 //

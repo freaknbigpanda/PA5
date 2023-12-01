@@ -111,4 +111,51 @@
 #define BLT      "\tblt\t"
 #define BGT      "\tbgt\t"
 
+class BoolConst;
 
+void emit_load(char *dest_reg, int offset, char *source_reg, ostream& s);
+void emit_store(const char *source_reg, int offset,const char *dest_reg, ostream& s);
+void emit_load_imm(const char *dest_reg, int val, ostream& s);
+void emit_load_address(const char *dest_reg,const char *address, ostream& s);
+void emit_partial_load_address(const char *dest_reg, ostream& s);
+void emit_load_bool(const char *dest, const BoolConst& b, ostream& s);
+void emit_load_string(char *dest, StringEntry *str, ostream& s);
+void emit_load_int(char *dest, IntEntry *i, ostream& s);
+void emit_move(const char *dest_reg, const char *source_reg, ostream& s);
+void emit_neg(const char *dest, const char *src1, ostream& s);
+void emit_add(const char *dest, const char *src1, const char *src2, ostream& s);
+void emit_andi(const char *dest, const char *src1, int imm, ostream& s);
+void emit_and(const char *dest, const char *src1, const char *src2, ostream& s);
+void emit_ori(const char *dest, const char *src1, int imm, ostream& s);
+void emit_addu(const char *dest, const char *src1, const char *src2, ostream& s);
+void emit_addiu(const char *dest, const char *src1, int imm, ostream& s);
+void emit_div(const char *dest, const char *src1, const char *src2, ostream& s);
+void emit_mul(const char *dest, const char *src1, const char *src2, ostream& s);
+void emit_sub(const char *dest, const char *src1, const char *src2, ostream& s);
+void emit_sll(const char *dest, const char *src1, int num, ostream& s);
+void emit_slt(const char *cmp_result, const char *lhs, const char *rhs, ostream& s);
+void emit_slti(const char *cmp_result, const char *lhs, int imm, ostream& s);
+void emit_jalr(const char *dest, ostream& s);
+void emit_jal(const char *address,ostream &s);
+void emit_return(ostream& s);
+void emit_gc_assign(ostream& s);
+void emit_disptable_ref(Symbol sym, ostream& s);
+void emit_init_ref(Symbol sym, ostream& s);
+void emit_label_ref(int l, ostream &s);
+void emit_protobj_ref(Symbol sym, ostream& s);
+void emit_method_ref(Symbol classname, Symbol methodname, ostream& s);
+void emit_label_def(int l, ostream &s);
+void emit_jump(int label, ostream &s);
+void emit_beqz(char *source, int label, ostream &s);
+void emit_beq(char *src1, char *src2, int label, ostream &s);
+void emit_bne(char *src1, char *src2, int label, ostream &s);
+void emit_bleq(char *src1, char *src2, int label, ostream &s);
+void emit_blt(char *src1, char *src2, int label, ostream &s);
+void emit_blti(char *src1, int imm, int label, ostream &s);
+void emit_bgti(char *src1, int imm, int label, ostream &s);
+void emit_branch(int l, ostream& s);
+void emit_push(char *reg, ostream& str);
+void emit_fetch_int(char *dest, char *source, ostream& s);
+void emit_store_int(char *source, char *dest, ostream& s);
+void emit_test_collector(ostream &s);
+void emit_gc_check(char *source, ostream &s);

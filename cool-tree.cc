@@ -10,6 +10,37 @@
 #include "tree.h"
 #include "cool-tree.handcode.h"
 #include "cool-tree.h"
+#include "cgen.h"
+#include "emit.h"
+#include <sstream>
+
+extern Symbol
+         arg,
+         arg2,
+         Bool,
+         concat,
+         cool_abort,
+         copy,
+         Int,
+         in_int,
+         in_string,
+         IO,
+         length,
+         Main,
+         main_meth,
+         No_class,
+         No_type,
+         Object,
+         out_int,
+         out_string,
+         prim_slot,
+         self,
+         SELF_TYPE,
+         Str,
+         str_field,
+         substr,
+         type_name,
+         val;
 
 
 // constructors' functions
@@ -657,3 +688,285 @@ Expression object(Symbol name)
   return new object_class(name);
 }
 
+//******************************************************************
+//
+//   Fill in the following methods to produce code for the
+//   appropriate expression.  You may add or remove parameters
+//   as you wish, but if you do, remember to change the parameters
+//   of the declarations in `cool-tree.h'  Sample code for
+//   constant integers, strings, and booleans are provided.
+//
+//*****************************************************************
+
+void assign_class::code(ostream &s, CgenNodeP cgen_node) {
+}
+
+void static_dispatch_class::code(ostream &s, CgenNodeP cgen_node) {
+}
+
+void dispatch_class::code(ostream &s, CgenNodeP cgen_node) {
+}
+
+void cond_class::code(ostream &s, CgenNodeP cgen_node) {
+}
+
+void loop_class::code(ostream &s, CgenNodeP cgen_node) {
+}
+
+void typcase_class::code(ostream &s, CgenNodeP cgen_node) {
+}
+
+void block_class::code(ostream &s, CgenNodeP cgen_node) {
+}
+
+void let_class::code(ostream &s, CgenNodeP cgen_node) {
+}
+
+static void emit_binary_op_prefix(Expression lhs, Expression rhs, ostream &s, CgenNodeP cgen_node)
+{
+  // This function assumes that Int objects will be present in register ACC after evaluating both lhs and rhs expressions
+
+  lhs->code(s, cgen_node);
+
+  // push lhs result to stack
+  emit_store(ACC, 0, SP, s);
+  // bump the stack pointer
+  emit_addiu(SP, SP, -1 * WORD_SIZE, s);
+
+  rhs->code(s, cgen_node);
+
+  // load the memory address of the object into T2
+  emit_load(T2, 1, SP, s);
+
+  // load the int result from the lhs into T1
+  emit_load(T1, 3, T2, s);
+
+  // Load the int result from the rhs into T2
+  emit_load(T2, 3, ACC, s);
+
+  //T1 now stores the lhs int operand and T2 now stores the rhs int operand-
+}
+
+static void emit_object_allocation(Symbol return_type, ostream &s)
+{
+  /* Create a new return object on the heap, populate its data field with the value in ACC, and populate ACC with a pointer to that object
+      Note: Expects the raw result of the operand to be in register T2 */
+
+  // Load the proto object address into ACC
+  emit_partial_load_address(ACC, s);
+  emit_protobj_ref(return_type, s);
+  s << endl;
+
+  // Create the object on the heap
+  std::stringstream method_name;
+  emit_method_ref(Object, copy, method_name);
+  emit_jal(method_name.str().c_str(), s);
+
+  // Store the result in T2 into the object stored at ACC
+  emit_store(T2, 3, ACC, s);
+}
+
+// Why do the results of expressions get allocated on the heap? How does that make any sense?
+// Why couldn't we allocate the result of expressions on the stack? Binary ops are all
+
+static void emit_binary_op_suffix(Symbol return_type, ostream &s)
+{
+  // For bools we don't need to allocate a new object
+  if (return_type == Int) emit_object_allocation(return_type, s);
+
+  // return the stack pointer to its previous value
+  emit_addiu(SP, SP, WORD_SIZE, s);
+}
+
+void plus_class::code(ostream &s, CgenNodeP cgen_node)
+{
+  emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
+
+  // add T1 + T2
+  emit_add(T2, T1, T2, s);
+
+  emit_binary_op_suffix(Int, s);
+}
+
+void sub_class::code(ostream &s, CgenNodeP cgen_node)
+{
+  emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
+
+  // sub T1 - T2
+  emit_sub(T2, T1, T2, s);
+
+  emit_binary_op_suffix(Int, s);
+}
+
+void mul_class::code(ostream &s, CgenNodeP cgen_node)
+{
+  emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
+
+  // mul T1 * T2
+  emit_mul(T2, T1, T2, s);
+
+  emit_binary_op_suffix(Int, s);
+}
+
+void divide_class::code(ostream &s, CgenNodeP cgen_node)
+{
+  emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
+
+  // mul T1 / T2
+  emit_div(T2, T1, T2, s);
+
+  emit_binary_op_suffix(Int, s);
+}
+
+void neg_class::code(ostream &s, CgenNodeP cgen_node)
+{
+    get_rhs()->code(s, cgen_node);
+
+    // Load the int value into ACC
+    emit_load(ACC, 3, ACC, s);
+
+    // Load -1 into T1
+    emit_load_imm(T1, -1, s);
+
+    // Negate the int value by multiplying by -1
+    emit_mul(T2, ACC, T1, s);
+
+    // Create a new Int object on the heap and store the value of T2 in it
+    emit_object_allocation(Int, s);
+}
+
+void lt_class::code(ostream &s, CgenNodeP cgen_node)
+{
+  emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
+
+  emit_blt(T1, T2, 0, s);
+  emit_load_bool(ACC, BoolConst(0), s);
+  emit_jump(1, s);
+  emit_label_def(0, s);
+  emit_load_bool(ACC, BoolConst(1), s);
+  emit_label_def(1, s);
+
+  emit_binary_op_suffix(Bool, s);
+}
+
+void leq_class::code(ostream &s, CgenNodeP cgen_node)
+{
+  emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
+
+  emit_bleq(T1, T2, 0, s);
+  emit_load_bool(ACC, BoolConst(0), s);
+  emit_jump(1, s);
+  emit_label_def(0, s);
+  emit_load_bool(ACC, BoolConst(1), s);
+  emit_label_def(1, s);
+
+  emit_binary_op_suffix(Bool, s);
+}
+
+void eq_class::code(ostream &s, CgenNodeP cgen_node)
+{
+  get_lhs()->code(s, cgen_node);
+  // Push result of LHS onto the stack
+  emit_store(ACC, 0, SP, s);
+  emit_addiu(SP, SP, -1 * WORD_SIZE, s);
+
+  get_rhs()->code(s, cgen_node);
+  // move RHS into T2
+  emit_move(T2, ACC, s);
+  // load LHS into T1
+  emit_load(T1, 1, SP, s);
+
+  // Value returned in ACC if true
+  emit_load_bool(ACC, BoolConst(1), s);
+
+  // Value return in ACC if false
+  emit_load_bool(A1, BoolConst(0), s);
+
+  // Jump and link to the compare method
+  emit_jal("equality_test", s);
+
+  // Restore the stack pointer
+  emit_addiu(SP, SP, WORD_SIZE, s);
+}
+
+// Note: this is actually the not operator. No idea why it is called comp
+void comp_class::code(ostream &s, CgenNodeP cgen_node)
+{
+  // this produces a bool value in acc
+  get_rhs()->code(s, cgen_node);
+
+  // Load the bool value into ACC
+  emit_load(ACC, 3, ACC, s);
+
+  // Inverts the bool object and stores result in T2. In other words if ACC < 1 sets ACC to 1 otherwise sets it to 0
+  emit_slti(T2, ACC, 1, s);
+
+  // If T2 is Zero then return BoolConst(0) object, otherwise return BoolConst(1) object
+  emit_beq(T2, ZERO, 0, s);
+  emit_load_bool(ACC, BoolConst(1), s);
+  emit_jump(1, s);
+  emit_label_def(0, s);
+  emit_load_bool(ACC, BoolConst(0), s);
+  emit_label_def(1, s);
+}
+
+void int_const_class::code(ostream& s, CgenNodeP cgen_node)
+{
+  //
+  // Need to be sure we have an IntEntry *, not an arbitrary Symbol
+  //
+  emit_load_int(ACC,inttable.lookup_string(token->get_string()),s);
+}
+
+void string_const_class::code(ostream& s, CgenNodeP cgen_node)
+{
+  emit_load_string(ACC,stringtable.lookup_string(token->get_string()),s);
+}
+
+void bool_const_class::code(ostream& s, CgenNodeP cgen_node)
+{
+  emit_load_bool(ACC, BoolConst(val), s);
+}
+
+void new__class::code(ostream &s, CgenNodeP cgen_node)
+{
+  // todo: implement support for SELF_TYPE
+
+  // Load the correct proto-object into ACC
+  emit_partial_load_address(ACC, s);
+  emit_protobj_ref(get_type_name(), s);
+  s << endl;
+
+  // Copy the proto-object to the heap
+  // todo: don't really like this since if the method name changed this would break
+  emit_jal("Object.copy", s);
+
+  // Invoke initialization method on the object that we just allocated
+  std::stringstream init_method_ref;
+  emit_init_ref(get_type_name(), init_method_ref);
+  emit_jal(init_method_ref.str().c_str(), s);
+}
+
+void isvoid_class::code(ostream &s, CgenNodeP cgen_node)
+{
+  get_rhs()->code(s, cgen_node);
+
+  emit_beq(ACC, ZERO, 0, s);
+  emit_load_bool(ACC, BoolConst(0), s);
+  emit_jump(1, s);
+  emit_label_def(0, s);
+  emit_load_bool(ACC, BoolConst(1), s);
+  emit_label_def(1, s);
+}
+
+void no_expr_class::code(ostream &s, CgenNodeP cgen_node)
+{
+  // Load void into ACC for no_expr
+  emit_load_imm(ACC, 0, s);
+}
+
+void object_class::code(ostream &s, CgenNodeP cgen_node)
+{
+  int attribute_location = cgen_node->get_attribute_location(get_name());
+  emit_load(ACC, 3 + attribute_location, SELF, s);
+}
