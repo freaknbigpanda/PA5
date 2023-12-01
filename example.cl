@@ -3,15 +3,10 @@
     as possible.
  *)
 
-class Main inherits IO {
-  main():Int { 0 };
+class Main {
+  d: Object <- new Int;
+  main():Int { {isvoid(d); 0; 1; 2;} };
 };
 
-class Hello {
-  a: Int <- 42;
-};
-
-class Bye inherits Hello {
-  b: Int <- 42;
-};
-
+(* what exactly is heap memory? Well it is whenever somebody calls object copy, 
+that is the only time that we allocate anything on the heap*)

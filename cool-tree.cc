@@ -717,6 +717,10 @@ void typcase_class::code(ostream &s, CgenNodeP cgen_node) {
 }
 
 void block_class::code(ostream &s, CgenNodeP cgen_node) {
+   for(int i = body->first(); body->more(i); i = body->next(i))
+   {
+      body->nth(i)->code(s, cgen_node);
+   }
 }
 
 void let_class::code(ostream &s, CgenNodeP cgen_node) {
@@ -766,8 +770,8 @@ static void emit_object_allocation(Symbol return_type, ostream &s)
   emit_store(T2, 3, ACC, s);
 }
 
-// Why do the results of expressions get allocated on the heap? How does that make any sense?
-// Why couldn't we allocate the result of expressions on the stack? Binary ops are all
+// todo: Why do the results of expressions get allocated on the heap? How does that make any sense?
+// Why couldn't we allocate the result of expressions on the stack?
 
 static void emit_binary_op_suffix(Symbol return_type, ostream &s)
 {
