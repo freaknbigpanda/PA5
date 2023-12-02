@@ -700,6 +700,9 @@ Expression object(Symbol name)
 //*****************************************************************
 
 void assign_class::code(ostream &s, CgenNodeP cgen_node) {
+   get_expr()->code(s, cgen_node);
+   int attribute_location = cgen_node->get_attribute_location(get_symbol_name());
+   emit_store(ACC, 3 + attribute_location, SELF, s);
 }
 
 void static_dispatch_class::code(ostream &s, CgenNodeP cgen_node) {

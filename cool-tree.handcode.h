@@ -172,5 +172,9 @@ Expressions get_body() { return body; };
 Expression get_pred() { return pred; }	\
 Expression get_body() { return body; }
 
+#define assign_EXTRAS	\
+Symbol get_symbol_name() { return name; }	\
+Expression get_expr() { return expr; }
+
 
 #endif
