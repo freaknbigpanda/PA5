@@ -42,6 +42,7 @@ extern Symbol
          type_name,
          val;
 
+static int label_index  = 0;
 
 // constructors' functions
 Program program_class::copy_Program()
@@ -711,6 +712,40 @@ void cond_class::code(ostream &s, CgenNodeP cgen_node) {
 }
 
 void loop_class::code(ostream &s, CgenNodeP cgen_node) {
+   int exit_label = label_index++;
+   int loop_label = label_index++;
+   int evaluate_pred_label = label_index++;
+
+   // first emit the code to evaluate the predicate
+   emit_label_def(evaluate_pred_label, s);
+   pred->code(s, cgen_node);
+
+   // after the predicate is evaluated we need to test to see if it is true or false
+   // to do that we:
+   // First load boolconst1 into T1
+   emit_load_bool(T1, BoolConst(1), s);
+
+   // Then load the result of the pred expression into T2
+   emit_add(T2, ACC, ZERO, s);
+
+   // Value returned in ACC if true
+   emit_load_imm(ACC, 1, s);
+
+   // Value return in ACC if false
+   emit_load_imm(A1, 0, s);
+
+   // Jump and link to the compare method to test the predicate result
+   emit_jal("equality_test", s);
+
+   emit_beq(ACC, ZERO, exit_label, s);
+
+   emit_label_def(loop_label, s);
+   body->code(s, cgen_node);
+   emit_jump(evaluate_pred_label, s);
+
+   emit_label_def(exit_label, s);
+   // loop always returns void
+   emit_load_imm(ACC, 0, s);
 }
 
 void typcase_class::code(ostream &s, CgenNodeP cgen_node) {
@@ -841,30 +876,34 @@ void neg_class::code(ostream &s, CgenNodeP cgen_node)
 
 void lt_class::code(ostream &s, CgenNodeP cgen_node)
 {
-  emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
+   emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
+   int true_branch_label = label_index++;
+   int false_branch_label = label_index++;
 
-  emit_blt(T1, T2, 0, s);
-  emit_load_bool(ACC, BoolConst(0), s);
-  emit_jump(1, s);
-  emit_label_def(0, s);
-  emit_load_bool(ACC, BoolConst(1), s);
-  emit_label_def(1, s);
+   emit_blt(T1, T2, true_branch_label, s);
+   emit_load_bool(ACC, BoolConst(0), s);
+   emit_jump(false_branch_label, s);
+   emit_label_def(true_branch_label, s);
+   emit_load_bool(ACC, BoolConst(1), s);
+   emit_label_def(false_branch_label, s);
 
-  emit_binary_op_suffix(Bool, s);
+   emit_binary_op_suffix(Bool, s);
 }
 
 void leq_class::code(ostream &s, CgenNodeP cgen_node)
 {
-  emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
+   emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
+   int true_branch_label = label_index++;
+   int false_branch_label = label_index++;
 
-  emit_bleq(T1, T2, 0, s);
-  emit_load_bool(ACC, BoolConst(0), s);
-  emit_jump(1, s);
-  emit_label_def(0, s);
-  emit_load_bool(ACC, BoolConst(1), s);
-  emit_label_def(1, s);
+   emit_bleq(T1, T2, true_branch_label, s);
+   emit_load_bool(ACC, BoolConst(0), s);
+   emit_jump(false_branch_label, s);
+   emit_label_def(true_branch_label, s);
+   emit_load_bool(ACC, BoolConst(1), s);
+   emit_label_def(false_branch_label, s);
 
-  emit_binary_op_suffix(Bool, s);
+   emit_binary_op_suffix(Bool, s);
 }
 
 void eq_class::code(ostream &s, CgenNodeP cgen_node)
@@ -896,22 +935,27 @@ void eq_class::code(ostream &s, CgenNodeP cgen_node)
 // Note: this is actually the not operator. No idea why it is called comp
 void comp_class::code(ostream &s, CgenNodeP cgen_node)
 {
-  // this produces a bool value in acc
-  get_rhs()->code(s, cgen_node);
+   int false_label = label_index++;
+   int true_label = label_index++;
+   // this produces a bool value in acc
+   get_rhs()->code(s, cgen_node);
 
-  // Load the bool value into ACC
-  emit_load(ACC, 3, ACC, s);
+   // Load the bool value into ACC
+   emit_load(ACC, 3, ACC, s);
 
-  // Inverts the bool object and stores result in T2. In other words if ACC < 1 sets ACC to 1 otherwise sets it to 0
-  emit_slti(T2, ACC, 1, s);
+   // Inverts the bool object and stores result in T2. In other words if ACC < 1 sets ACC to 1 otherwise sets it to 0
+   emit_slti(T2, ACC, 1, s);
 
-  // If T2 is Zero then return BoolConst(0) object, otherwise return BoolConst(1) object
-  emit_beq(T2, ZERO, 0, s);
-  emit_load_bool(ACC, BoolConst(1), s);
-  emit_jump(1, s);
-  emit_label_def(0, s);
-  emit_load_bool(ACC, BoolConst(0), s);
-  emit_label_def(1, s);
+   int zero_label = label_index++;
+   int one_label = label_index++;
+
+   // If T2 is Zero then return BoolConst(0) object, otherwise return BoolConst(1) object
+   emit_beq(T2, ZERO, zero_label, s);
+   emit_load_bool(ACC, BoolConst(1), s);
+   emit_jump(one_label, s);
+   emit_label_def(zero_label, s);
+   emit_load_bool(ACC, BoolConst(0), s);
+   emit_label_def(one_label, s);
 }
 
 void int_const_class::code(ostream& s, CgenNodeP cgen_node)
@@ -955,12 +999,15 @@ void isvoid_class::code(ostream &s, CgenNodeP cgen_node)
 {
   get_rhs()->code(s, cgen_node);
 
-  emit_beq(ACC, ZERO, 0, s);
+  int zero_label = label_index++;
+  int one_label = label_index++;
+
+  emit_beq(ACC, ZERO, zero_label, s);
   emit_load_bool(ACC, BoolConst(0), s);
-  emit_jump(1, s);
-  emit_label_def(0, s);
+  emit_jump(one_label, s);
+  emit_label_def(zero_label, s);
   emit_load_bool(ACC, BoolConst(1), s);
-  emit_label_def(1, s);
+  emit_label_def(one_label, s);
 }
 
 void no_expr_class::code(ostream &s, CgenNodeP cgen_node)

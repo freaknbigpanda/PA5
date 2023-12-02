@@ -168,5 +168,9 @@ Symbol get_type_name() { return type_name; }
 #define block_EXTRAS	\
 Expressions get_body() { return body; };
 
+#define loop_EXTRAS	\
+Expression get_pred() { return pred; }	\
+Expression get_body() { return body; }
+
 
 #endif
