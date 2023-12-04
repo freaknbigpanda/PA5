@@ -182,6 +182,11 @@ Symbol get_let_type_decl() { return type_decl; }	\
 Expression get_let_init() { return init; }	\
 Expression get_let_body() { return body; }	
 
+#define cond_EXTRAS	\
+Expression get_pred() { return pred; }	\
+Expression get_then() { return then_exp; }	\
+Expression get_else() { return else_exp; }
 
+// todo: I don't need any of these methods lol
 
 #endif

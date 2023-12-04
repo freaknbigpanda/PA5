@@ -712,12 +712,50 @@ void assign_class::code(ostream &s, CgenNodeP cgen_node) {
 }
 
 void static_dispatch_class::code(ostream &s, CgenNodeP cgen_node) {
+
 }
 
 void dispatch_class::code(ostream &s, CgenNodeP cgen_node) {
+
 }
 
 void cond_class::code(ostream &s, CgenNodeP cgen_node) {
+   int evaluate_pred_label = label_index++;
+   int else_label = label_index++;
+   int exit_label = label_index++;
+
+   // first emit the code to evaluate the predicate
+   emit_label_def(evaluate_pred_label, s);
+   get_pred()->code(s, cgen_node);
+
+   // after the predicate is evaluated we need to test to see if it is true or false
+   // to do that we:
+   // First load boolconst1 into T1
+   emit_load_bool(T1, BoolConst(1), s);
+
+   // Then load the result of the pred expression into T2
+   emit_add(T2, ACC, ZERO, s);
+
+   // Value returned in ACC if true
+   emit_load_imm(ACC, 1, s);
+
+   // Value return in ACC if false
+   emit_load_imm(A1, 0, s);
+
+   // Jump and link to the compare method to test the predicate result
+   emit_jal("equality_test", s);
+
+   // Jump to else if false
+   emit_beq(ACC, ZERO, else_label, s);
+   // evaluate the then block if true
+   get_then()->code(s, cgen_node);
+   emit_jump(exit_label, s);
+
+   emit_label_def(else_label, s);
+   // evaluate else block if false
+   get_else()->code(s, cgen_node);
+
+   emit_label_def(exit_label, s);
 }
 
 void loop_class::code(ostream &s, CgenNodeP cgen_node) {
@@ -727,7 +765,7 @@ void loop_class::code(ostream &s, CgenNodeP cgen_node) {
 
    // first emit the code to evaluate the predicate
    emit_label_def(evaluate_pred_label, s);
-   pred->code(s, cgen_node);
+   get_pred()->code(s, cgen_node);
 
    // after the predicate is evaluated we need to test to see if it is true or false
    // to do that we:
