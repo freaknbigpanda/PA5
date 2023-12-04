@@ -88,6 +88,7 @@ private:
    std::map<Symbol, MethodOwnerPair> method_name_map;
    std::vector<AttrOwnerPair> attributes;
    std::map<Symbol, AttrOwnerPair> attribute_name_map;
+   std::map<Symbol, void*> let_symbol_map;
 
 public:
    CgenNode(Class_ c,

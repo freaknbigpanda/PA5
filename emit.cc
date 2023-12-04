@@ -2,6 +2,8 @@
 #include "cgen.h"
 #include "cgen_gc.h"
 
+extern int current_stack_size;
+
 //////////////////////////////////////////////////////////////////////////////
 //
 //  emit_* procedures
@@ -81,6 +83,18 @@ void emit_addu(const char *dest, const char *src1, const char *src2, ostream& s)
 
 void emit_addiu(const char *dest, const char *src1, int imm, ostream& s)
 { s << ADDIU << dest << " " << src1 << " " << imm << endl; }
+
+void emit_stack_size_push(int num_words, ostream& s)
+{ 
+  emit_addiu(SP, SP, -1 * num_words * WORD_SIZE, s);
+  current_stack_size++;
+}
+
+void emit_stack_size_pop(int num_words, ostream& s)
+{ 
+  emit_addiu(SP, SP, num_words * WORD_SIZE, s);
+  current_stack_size--; 
+}
 
 void emit_div(const char *dest, const char *src1, const char *src2, ostream& s)
 { s << DIV << dest << " " << src1 << " " << src2 << endl; }

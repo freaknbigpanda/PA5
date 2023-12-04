@@ -176,5 +176,12 @@ Expression get_body() { return body; }
 Symbol get_symbol_name() { return name; }	\
 Expression get_expr() { return expr; }
 
+#define let_EXTRAS	\
+Symbol get_let_id() { return identifier; }	\
+Symbol get_let_type_decl() { return type_decl; }	\
+Expression get_let_init() { return init; }	\
+Expression get_let_body() { return body; }	
+
+
 
 #endif

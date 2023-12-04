@@ -42,7 +42,13 @@ extern Symbol
          type_name,
          val;
 
-static int label_index  = 0;
+int label_index  = 0;
+// This value is increased whenever we emit code to push a value onto the stack 
+// and decreased whenever we emit code to pop a value from the stack
+int current_stack_size = 0;
+// To get the correct stack offset for a particular let binding do the following:
+// stack_size - let_bindings[let symbol]
+static std::map<Symbol, int> let_bindings;
 
 // constructors' functions
 Program program_class::copy_Program()
@@ -762,6 +768,38 @@ void block_class::code(ostream &s, CgenNodeP cgen_node) {
 }
 
 void let_class::code(ostream &s, CgenNodeP cgen_node) {
+   Expression let_init = get_let_init();
+
+   if (dynamic_cast<no_expr_class*>(let_init) == nullptr)
+   {
+      // If we have an init expr then evaluate the rhs
+      let_init->code(s, cgen_node);
+   }
+   else
+   {
+      // If not then load the default proto-obj for this object
+      emit_partial_load_address(ACC, s);
+      emit_protobj_ref(get_let_type_decl(), s);
+      s << endl;
+   }
+
+   // Now copy this object into a new location on the heap
+   emit_jal("Object.copy", s);
+
+   // Push the result of the copy onto the stack
+   emit_store(ACC, 0, SP, s);
+
+   // Keep track of the let binding
+   let_bindings[get_let_id()] = current_stack_size;
+
+   // bump the stack pointer
+   emit_stack_size_push(1, s);
+
+   // Then evaluate the body of the let
+   get_let_body()->code(s, cgen_node);
+
+   // Restore the stack pointer
+   emit_stack_size_pop(1, s);
 }
 
 static void emit_binary_op_prefix(Expression lhs, Expression rhs, ostream &s, CgenNodeP cgen_node)
@@ -773,7 +811,7 @@ static void emit_binary_op_prefix(Expression lhs, Expression rhs, ostream &s, Cg
   // push lhs result to stack
   emit_store(ACC, 0, SP, s);
   // bump the stack pointer
-  emit_addiu(SP, SP, -1 * WORD_SIZE, s);
+  emit_stack_size_push(1, s);
 
   rhs->code(s, cgen_node);
 
@@ -817,7 +855,7 @@ static void emit_binary_op_suffix(Symbol return_type, ostream &s)
   if (return_type == Int) emit_object_allocation(return_type, s);
 
   // return the stack pointer to its previous value
-  emit_addiu(SP, SP, WORD_SIZE, s);
+  emit_stack_size_pop(1, s);
 }
 
 void plus_class::code(ostream &s, CgenNodeP cgen_node)
@@ -914,7 +952,7 @@ void eq_class::code(ostream &s, CgenNodeP cgen_node)
   get_lhs()->code(s, cgen_node);
   // Push result of LHS onto the stack
   emit_store(ACC, 0, SP, s);
-  emit_addiu(SP, SP, -1 * WORD_SIZE, s);
+  emit_stack_size_push(1, s);
 
   get_rhs()->code(s, cgen_node);
   // move RHS into T2
@@ -932,7 +970,7 @@ void eq_class::code(ostream &s, CgenNodeP cgen_node)
   emit_jal("equality_test", s);
 
   // Restore the stack pointer
-  emit_addiu(SP, SP, WORD_SIZE, s);
+  emit_stack_size_pop(1, s);
 }
 
 // Note: this is actually the not operator. No idea why it is called comp
@@ -1021,6 +1059,16 @@ void no_expr_class::code(ostream &s, CgenNodeP cgen_node)
 
 void object_class::code(ostream &s, CgenNodeP cgen_node)
 {
-  int attribute_location = cgen_node->get_attribute_location(get_name());
-  emit_load(ACC, 3 + attribute_location, SELF, s);
+   // first check to see if there are any let variables with the given name
+   if (let_bindings.find(get_name()) != let_bindings.end())
+   {
+      // if there are load the address into acc and return that
+      emit_load(ACC, current_stack_size - let_bindings[get_name()], SP, s);
+   }
+   else
+   {
+      // else look for a matching attribute
+      int attribute_location = cgen_node->get_attribute_location(get_name());
+      emit_load(ACC, 3 + attribute_location, SELF, s);
+   }
 }
