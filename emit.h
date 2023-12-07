@@ -20,6 +20,7 @@
 
 // Global names
 #define CLASSNAMETAB         "class_nameTab"
+#define CLASSTAGTAB          "class_tagTab"
 #define CLASSOBJTAB          "class_objTab"
 #define INTTAG               "_int_tag"
 #define BOOLTAG              "_bool_tag"
@@ -27,6 +28,8 @@
 #define HEAP_START           "heap_start"
 
 // Naming conventions
+
+#define INHERTAB_SUFFIX      "_inherTab"
 #define DISPTAB_SUFFIX       "_dispTab"
 #define METHOD_SEP           "."
 #define CLASSINIT_SUFFIX     "_init"
@@ -69,9 +72,11 @@
 #define ACC  "$a0"		// Accumulator 
 #define A1   "$a1"		// For arguments to prim funcs 
 #define SELF "$s0"		// Ptr to self (callee saves) 
+#define T0   "$t0"		// Temporary 1 
 #define T1   "$t1"		// Temporary 1 
 #define T2   "$t2"		// Temporary 2 
 #define T3   "$t3"		// Temporary 3 
+#define T4   "$t4"		// Temporary 4 
 #define SP   "$sp"		// Stack pointer 
 #define FP   "$fp"		// Frame pointer 
 #define RA   "$ra"		// Return address 
@@ -142,7 +147,8 @@ void emit_jal(const char *address,ostream &s);
 void emit_return(ostream& s);
 void emit_gc_assign(ostream& s);
 void emit_disptable_ref(Symbol sym, ostream& s);
-void emit_init_ref(Symbol sym, ostream& s);
+void emit_inhertable_ref(Symbol sym, ostream &s);
+void emit_init_ref(Symbol sym, ostream &s);
 void emit_label_ref(int l, ostream &s);
 void emit_protobj_ref(Symbol sym, ostream& s);
 void emit_method_ref(Symbol classname, Symbol methodname, ostream& s);
@@ -150,6 +156,7 @@ void emit_label_def(int l, ostream &s);
 void emit_jump(int label, ostream &s);
 void emit_beqz(char *source, int label, ostream &s);
 void emit_beq(char *src1, char *src2, int label, ostream &s);
+void emit_beq(char *src1, char *src2, char *label, ostream &s);
 void emit_bne(char *src1, char *src2, int label, ostream &s);
 void emit_bleq(char *src1, char *src2, int label, ostream &s);
 void emit_blt(char *src1, char *src2, int label, ostream &s);

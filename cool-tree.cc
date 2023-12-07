@@ -13,6 +13,7 @@
 #include "cgen.h"
 #include "emit.h"
 #include <sstream>
+#include <algorithm>
 
 extern Symbol
          arg,
@@ -796,12 +797,127 @@ void loop_class::code(ostream &s, CgenNodeP cgen_node) {
 }
 
 void typcase_class::code(ostream &s, CgenNodeP cgen_node) {
+   // First emit code to generate the predicate
+   get_case_expr()->code(s, cgen_node);
+
+   // todo: test this
+   // if the predicate is null jump to case abort2
+   emit_beq(ACC, ZERO, "_case_abort2", s);
+
+   // First get the class tag for the case expression class
+   emit_load(T1, 0, ACC, s);
+   // Then subtract 3 because the class tag table starts with class tag == 3
+   emit_addiu(T1, T1, -3, s);
+
+   // Load word size into T2
+   emit_load_imm(T2, WORD_SIZE, s);
+   // Multiply T1 by the number of bytes which is stored in T2 to get the offset from the CALLTAGTABLE label
+   emit_mul(T1, T1, T2, s);
+
+   //The correct class tag table offset is now stored in T1, now we need to use the class tag table to access the inheritance table for this class
+   emit_load_address(T2, CLASSTAGTAB, s);
+   //T1 now stores the location in memory of a word that stores the address to the inheritance table
+   emit_add(T1, T2, T1, s);
+
+   //T0 now stores the address of the inheritance table
+   emit_load(T0, 0, T1, s);
+
+   std::vector<branch_class*> case_branches;
+   // Sorting the branch objects based on their inheritance distance to object
+   for(int i = get_cases()->first(); get_cases()->more(i); i = get_cases()->next(i))
+   {
+      case_branches.push_back(static_cast<branch_class*>(get_cases()->nth(i)));
+   }
+
+   // Now for each of these branches I need to sort them based on their inheritance 
+   std::sort(case_branches.begin(), case_branches.end(), [cgen_node](branch_class* first, branch_class* second) {
+      CgenNodeP first_branch_type = cgen_node->get_symbol_table()->lookup(first->get_type());
+      CgenNodeP second_branch_type = cgen_node->get_symbol_table()->lookup(second->get_type());
+
+      return first_branch_type->get_inheritance_depth() > second_branch_type->get_inheritance_depth();
+   });
+
+   int case_finished_label = label_index++;
+
+   // Now start evaluating all of the branches from the deepest inheritance to the least deep (progressing towards object)
+   for(auto it = case_branches.cbegin(); it != case_branches.cend(); ++it)
+   {
+      int case_match_found_label = label_index++;
+      int case_branch_loop_label = label_index++;
+      int case_branch_exit_label = label_index++;
+
+      branch_class* caseBranch = *it;
+
+      // Load the address of the inheritance table into T1
+      emit_addiu(T1, T0, 0, s);
+
+      // Load the proto obj address into T2
+      emit_partial_load_address(T2, s);
+      emit_protobj_ref(caseBranch->get_type(), s);
+      s << endl;
+
+      // Load the class tag for this object into T2
+      emit_load(T2, 0, T2, s);
+
+      // Now we have the class tag of the branch type in T2 and the address of the inheritance table in T1
+
+      // Now we need to interate up the inheritance table until we get a match
+
+      // Load the class tag of the inheritance hierarchy pointed to by T1 into T3
+      emit_label_def(case_branch_loop_label, s);
+      emit_load(T3, 0, T1, s);
+
+      // If T3 is equal to 1 it means there was no match for this branch, exit the loop.
+      emit_addiu(T4, ZERO, 1, s);
+      emit_beq(T3, T4, case_branch_exit_label, s);
+
+      // If the loaded tag is equal to the tag stored in T2 we have a match
+      emit_beq(T3, T2, case_match_found_label, s);
+
+      // if not equal then increment and loop
+      emit_addiu(T1, T1, 4, s);
+      emit_jump(case_branch_loop_label, s);
+      
+      emit_label_def(case_match_found_label, s);
+
+      // add the case statement definition to the scope
+
+      // Now copy this object from the expression from acc a new location on the heap
+      emit_jal("Object.copy", s);
+
+      // Push the result of the copy onto the stack
+      emit_store(ACC, 0, SP, s);
+
+      // Keep track of the case binding
+      let_bindings[caseBranch->get_name()] = current_stack_size;
+
+      // bump the stack pointer
+      emit_stack_size_push(1, s);
+
+      // code gen for the case statement branch
+      caseBranch->get_expr()->code(s, cgen_node);
+
+      // Restore the stack pointer
+      emit_stack_size_pop(1, s);
+
+      // Jump out of the case expression
+      emit_jump(case_finished_label, s);
+
+      emit_label_def(case_branch_exit_label, s);
+   }
+   
+   emit_label_def(case_finished_label, s);
+
+   // If T3 is equal to 1 upon testing all of the branches it means there was no match
+   // todo: test this
+   emit_addiu(T4, ZERO, 1, s);
+   emit_beq(T3, T4, "_case_abort", s);
 }
 
 void block_class::code(ostream &s, CgenNodeP cgen_node) {
-   for(int i = body->first(); body->more(i); i = body->next(i))
+   for(int i = get_body()->first(); get_body()->more(i); i = get_body()->next(i))
    {
-      body->nth(i)->code(s, cgen_node);
+      get_body()->nth(i)->code(s, cgen_node);
    }
 }
 

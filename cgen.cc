@@ -384,10 +384,10 @@ void CgenClassTable::code_constants()
 
 CgenClassTable::CgenClassTable(Classes classes, ostream& s) : code_gen_classes(NULL) , str(s)
 {
-  stringclasstag = 4 /* Change to your String class tag here */;
-  intclasstag =    2 /* Change to your Int class tag here */;
-  boolclasstag =   3 /* Change to your Bool class tag here */;
-  nonbasicclasstag = 5;
+  stringclasstag = 5 /* Change to your String class tag here */;
+  intclasstag =    3 /* Change to your Int class tag here */;
+  boolclasstag =   4 /* Change to your Bool class tag here */;
+  nonbasicclasstag = 6;
 
   enterscope();
   if (cgen_debug) cout << "Building CgenClassTable" << endl;
@@ -401,7 +401,7 @@ CgenClassTable::CgenClassTable(Classes classes, ostream& s) : code_gen_classes(N
 
 void CgenClassTable::code_prototype_objects()
 {
-  for(auto it = cgen_nodes_for_class.cbegin(); it != cgen_nodes_for_class.cend(); ++it)
+  for(auto it = cgen_nodes_for_tag.cbegin(); it != cgen_nodes_for_tag.cend(); ++it)
   {
     if ((*it).second->get_name() == Bool) continue; // No need for bool protoobject since we already have the true and false consts
 
@@ -449,7 +449,7 @@ void CgenClassTable::code_prototype_objects()
 void CgenClassTable::code_class_names()
 {
   str << CLASSNAMETAB << ":" << endl;
-  for(auto it = cgen_nodes_for_class.cbegin(); it != cgen_nodes_for_class.cend(); ++it)
+  for(auto it = cgen_nodes_for_tag.cbegin(); it != cgen_nodes_for_tag.cend(); ++it)
   {
     str << WORD;
     CgenNode* current_node_ptr = (*it).second;
@@ -461,7 +461,7 @@ void CgenClassTable::code_class_names()
 void CgenClassTable::code_obj_table()
 {
   str << CLASSOBJTAB << ":" << endl;
-  for(auto it = cgen_nodes_for_class.cbegin(); it != cgen_nodes_for_class.cend(); ++it)
+  for(auto it = cgen_nodes_for_tag.cbegin(); it != cgen_nodes_for_tag.cend(); ++it)
   {
     if ((*it).second->get_name() == Bool) continue; // No bool proto object exists since we already have the true and false consts
 
@@ -475,9 +475,44 @@ void CgenClassTable::code_obj_table()
   }
 }
 
+void CgenClassTable::code_inheritance_table()
+{
+  for(auto it = cgen_nodes_for_tag.cbegin(); it != cgen_nodes_for_tag.cend(); ++it)
+  {
+    CgenNodeP current_parent = (*it).second;
+
+    emit_inhertable_ref(current_parent->get_name(), str);
+    str << ":" << endl;
+
+    while (current_parent != nullptr) 
+    {
+      str << WORD << current_parent->get_tag() << endl;
+      current_parent = current_parent->get_parentnd();
+    }
+  }
+}
+
+void CgenClassTable::code_class_tag_table()
+{
+  str << CLASSTAGTAB << ":" << endl;
+  int current_class_tag = -1;
+  for(auto it = cgen_nodes_for_tag.cbegin(); it != cgen_nodes_for_tag.cend(); ++it)
+  {
+    auto current_node = (*it).second;
+
+    if (current_class_tag == -1) current_class_tag = current_node->get_tag();
+    else current_class_tag = current_class_tag + 1;
+
+    // there is an assumption that the current class increases by one for each class
+    if (current_class_tag != current_node->get_tag()) abort();
+
+    str << WORD << current_node->get_name() << INHERTAB_SUFFIX << endl;
+  }
+}
+
 void CgenClassTable::code_dispatch_table()
 {
-  for(auto it = cgen_nodes_for_class.cbegin(); it != cgen_nodes_for_class.cend(); ++it)
+  for(auto it = cgen_nodes_for_tag.cbegin(); it != cgen_nodes_for_tag.cend(); ++it)
   {
     CgenNode* current_node_ptr = (*it).second;
 
@@ -497,7 +532,7 @@ void CgenClassTable::code_dispatch_table()
 // todo: Make sure to test initialization of attributes that reference other attributes of the same class
 void CgenClassTable::code_object_initializers()
 {
-  for(auto it = cgen_nodes_for_class.cbegin(); it != cgen_nodes_for_class.cend(); ++it)
+  for(auto it = cgen_nodes_for_tag.cbegin(); it != cgen_nodes_for_tag.cend(); ++it)
   {
     CgenNode* current_node_ptr = (*it).second;
     emit_init_ref(current_node_ptr->get_name(), str);
@@ -575,7 +610,7 @@ void CgenClassTable::code_object_initializers()
 
 void CgenClassTable::code_object_methods()
 {
-  for(auto it = cgen_nodes_for_class.cbegin(); it != cgen_nodes_for_class.cend(); ++it)
+  for(auto it = cgen_nodes_for_tag.cbegin(); it != cgen_nodes_for_tag.cend(); ++it)
   {
     CgenNodeP current_node_ptr = (*it).second;
     // We don't need to generate methods for basic classes since it has already been done
@@ -765,6 +800,7 @@ void CgenClassTable::install_class(CgenNodeP nd)
 
   if (probe(name))
     {
+      abort();
       return; // todo: not sure when this would get hit
     }
 
@@ -774,7 +810,7 @@ void CgenClassTable::install_class(CgenNodeP nd)
   addid(name,nd);
 
   // Add to the class tag to cgennode map
-  cgen_nodes_for_class[nd->get_tag()] = nd;
+  cgen_nodes_for_tag[nd->get_tag()] = nd;
 }
 
 void CgenClassTable::install_classes(Classes cs)
@@ -795,7 +831,7 @@ void CgenClassTable::build_inheritance_tree()
 
   // Now that the inheritance tree is built we can calculate the size of the objects
   // Set proto-object sizes and collect attributes and methods in vectors for all of the CgenNodes
-  for(auto it = cgen_nodes_for_class.cbegin(); it != cgen_nodes_for_class.cend(); ++it)
+  for(auto it = cgen_nodes_for_tag.cbegin(); it != cgen_nodes_for_tag.cend(); ++it)
   {
     CgenNode* current_node_ptr = (*it).second;
     current_node_ptr->set_size_attributes_methods();
@@ -866,6 +902,7 @@ void CgenNode::set_size_attributes_methods()
     methods = new_methods;
 
     current_parent = current_parent->parentnd;
+    inheritance_depth++;
   }
 }
 
@@ -897,8 +934,14 @@ void CgenClassTable::code()
   if (cgen_debug) cout << "coding class_objTab" << endl;
   code_obj_table();
 
-  if (cgen_debug) cout << "coding dispatch tables" << endl;
+  if (cgen_debug) cout << "coding dispatch table" << endl;
   code_dispatch_table();
+
+  if (cgen_debug) cout << "coding inheritance table" << endl;
+  code_inheritance_table();
+
+  if (cgen_debug) cout << "coding inheritance table" << endl;
+  code_class_tag_table(); 
 
   if (cgen_debug) cout << "coding global text" << endl;
   code_global_text();
@@ -915,6 +958,9 @@ int CgenClassTable::get_next_class_tag(Symbol class_name)
   if (class_name == Bool) return boolclasstag;
   else if (class_name == Int) return intclasstag;
   else if (class_name == Str) return stringclasstag;
+  else if (class_name == prim_slot) return 0;
+  else if (class_name == No_class) return 1;
+  else if (class_name == SELF_TYPE) return 2;
   else return nonbasicclasstag++;
 }
 
@@ -934,7 +980,8 @@ CgenNode::CgenNode(Class_ nd, Basicness bstatus, CgenClassTableP ct) :
    class__class((const class__class &) *nd),
    parentnd(NULL),
    children(NULL),
-   basic_status(bstatus)
+   basic_status(bstatus),
+   symbol_table(ct)
 {
    string_entry = stringtable.add_string(name->get_string()); // Add class name to string table
    tag = ct->get_next_class_tag(nd->get_name());

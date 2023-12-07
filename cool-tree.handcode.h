@@ -106,7 +106,10 @@ virtual void dump_with_types(ostream& ,int) = 0;
 
 
 #define branch_EXTRAS                                   \
-void dump_with_types(ostream& ,int);
+void dump_with_types(ostream& ,int); \
+Symbol get_name() { return name; };	\
+Symbol get_type() { return type_decl; }	\
+Expression get_expr() { return expr; }
 
 
 #define Expression_EXTRAS                    \
@@ -186,6 +189,10 @@ Expression get_let_body() { return body; }
 Expression get_pred() { return pred; }	\
 Expression get_then() { return then_exp; }	\
 Expression get_else() { return else_exp; }
+
+#define typcase_EXTRAS	\
+Expression get_case_expr() { return expr; }	\
+Cases get_cases() { return cases; }
 
 // todo: I don't need any of these methods lol
 

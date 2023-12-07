@@ -35,7 +35,7 @@ private:
    int intclasstag;
    int boolclasstag;
    int nonbasicclasstag;
-   CgenNodeMap cgen_nodes_for_class;
+   CgenNodeMap cgen_nodes_for_tag;
 
 // The following methods emit code for
 // constants and global declarations.
@@ -48,6 +48,8 @@ private:
    void code_prototype_objects();
    void code_class_names();
    void code_obj_table();
+   void code_inheritance_table();
+   void code_class_tag_table();
    void code_dispatch_table();
    void code_object_initializers();
    void code_object_methods();
@@ -67,7 +69,7 @@ public:
    void code();
    int get_next_class_tag(Symbol class_name);
    CgenNodeP get_class_with_tag(int tag) const;
-   CgenNodeMap get_cgen_node_map() const { return cgen_nodes_for_class; }
+   CgenNodeMap get_cgen_node_map() const { return cgen_nodes_for_tag; }
    CgenNodeP root();
 };
 
@@ -82,7 +84,9 @@ private:
                                               // `NotBasic' otherwise
    int tag = -1;
    int size = -1;
+   int inheritance_depth = -1;
    StringEntryP string_entry = nullptr;
+   SymbolTable<Symbol,CgenNode>* symbol_table;
 
    std::vector<MethodOwnerPair> methods;
    std::map<Symbol, MethodOwnerPair> method_name_map;
@@ -102,6 +106,8 @@ public:
    int basic() { return (basic_status == Basic); }
    int get_size() { return size; }
    int get_tag() { return tag; }
+   int get_inheritance_depth() { return inheritance_depth; }
+   SymbolTable<Symbol,CgenNode>* get_symbol_table() { return symbol_table; }
    StringEntryP get_string_entry() { return string_entry; }
    void set_size_attributes_methods();
    int get_attribute_location(Symbol attribute_name);

@@ -129,6 +129,9 @@ void emit_gc_assign(ostream& s)
 void emit_disptable_ref(Symbol sym, ostream& s)
 {  s << sym << DISPTAB_SUFFIX; }
 
+void emit_inhertable_ref(Symbol sym, ostream& s)
+{ s << sym << INHERTAB_SUFFIX; }
+
 void emit_init_ref(Symbol sym, ostream& s)
 { s << sym << CLASSINIT_SUFFIX; }
 
@@ -166,6 +169,11 @@ void emit_beq(char *src1, char *src2, int label, ostream &s)
   s << BEQ << src1 << " " << src2 << " ";
   emit_label_ref(label,s);
   s << endl;
+}
+
+void emit_beq(char *src1, char *src2, char* label, ostream &s)
+{
+  s << BEQ << src1 << " " << src2 << " " << label << endl;
 }
 
 void emit_bne(char *src1, char *src2, int label, ostream &s)
