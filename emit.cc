@@ -258,3 +258,31 @@ void emit_gc_check(char *source, ostream &s)
   if (source != (char*)A1) emit_move(A1, source, s);
   s << JAL << "_gc_check" << endl;
 }
+
+int emit_method_prefix(ostream &str) 
+{
+   const int stack_size_push = 3;
+   // Grow the stack 12 bytes for 3 words worth of shit
+   emit_stack_size_push(stack_size_push, str);
+   // Preserve all of the registers we have to for a function call
+   // Todo: the runtime system pdf mentions that s0-s7 are "The standard callee-saved registers on the MIPS architecture" so not sure if I need to save them all here or not
+   // I should only need to save these registers if I use them
+   emit_store(FP, 3, SP, str);
+   emit_store(SELF, 2, SP, str);
+   emit_store(RA, 1, SP, str);
+
+   // the stack pointer now points to unused stack memory, set the FP to be 1 word before
+   emit_addiu(FP, SP, 4, str);
+
+   return stack_size_push;
+}
+
+void emit_method_suffix(ostream &str, int parameter_count)
+{
+   emit_load(FP, 3, SP, str);
+   emit_load(SELF, 2, SP, str);
+   emit_load(RA, 1, SP, str);
+   emit_stack_size_pop(3 + parameter_count, str);
+
+   emit_return(str);
+}

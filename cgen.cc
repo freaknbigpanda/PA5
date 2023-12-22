@@ -31,6 +31,8 @@
 
 extern void emit_string_constant(ostream& str, char *s);
 extern int cgen_debug;
+extern std::map<Symbol, int> dynamic_bindings;
+extern int current_stack_size;
 
 //
 // Three symbols from the semantic analyzer (semant.cc) are used.
@@ -525,6 +527,8 @@ void CgenClassTable::code_dispatch_table()
       str << WORD;
       emit_method_ref((*it).second, (*it).first->get_name(), str);
       str << endl;
+      int method_index = it - methods.begin();
+      current_node_ptr->set_method_location((*it).first->get_name(), method_index);
     }
   }
 }
@@ -537,20 +541,13 @@ void CgenClassTable::code_object_initializers()
     CgenNode* current_node_ptr = (*it).second;
     emit_init_ref(current_node_ptr->get_name(), str);
     str << ":" << endl;
-    // Grow the stack 12 bytes for 3 words worth of shit
-    emit_addiu(SP, SP, -12, str);
-    // Preserve all of the registers we have to for a function call
-    // Todo: the runtime system pdf mentions that s0-s7 are "The standard callee-saved registers on the MIPS architecture" so not sure if I need to save them all here or not
-    // I should only need to save these registers if I use them
-    emit_store(FP, 3, SP, str);
-    emit_store(SELF, 2, SP, str);
-    emit_store(RA, 1, SP, str);
 
-    // the stack pointer now points to unused stack memory, set the FP to be 1 word before
-    emit_addiu(FP, SP, 4, str);
+    emit_method_prefix(str);
 
     // Save the value of self into register S0
     emit_move(SELF, ACC, str);
+    
+
     if (current_node_ptr->get_name() != Object)
     {
       std::stringstream init_ref;
@@ -599,12 +596,8 @@ void CgenClassTable::code_object_initializers()
 
     // Restore the value of self back to register A0 before the method exits
     emit_move(ACC, SELF, str);
-    emit_load(FP, 3, SP, str);
-    emit_load(SELF, 2, SP, str);
-    emit_load(RA, 1, SP, str);
-    emit_addiu(SP, SP, 12, str);
 
-    emit_return(str);
+    emit_method_suffix(str, 0);
   }
 }
 
@@ -626,43 +619,20 @@ void CgenClassTable::code_object_methods()
       emit_method_ref(current_node_ptr->get_name(), method->get_name(), str);
       str << ":" << endl;
 
-      Formals parameters = method->get_parameters();
+      int stack_size_push = emit_method_prefix(str);
 
-      // **** Begin method code generation ****
-
-      // setup a new frame pointer at the current stack pointer
-      emit_move(FP, SP, str);
-
-      // store ra register on the stack because codegen for the method body may trample it
-      emit_store(RA, 0, SP, str);
-      emit_addiu(SP, SP, -1 * WORD_SIZE, str);
-
-      // store register S0 on the stack because apparently this is required by the cool runtime system
-      emit_store(SELF, 0, SP, str);
-      emit_addiu(SP, SP, -1 *WORD_SIZE, str);
-
-      // save the value of self stored in aO to register s0
-      emit_move(SELF, ACC, str);
+      // Add bindings for all of the formal identifiers
+      for(int i = method->formals->first(); method->formals->more(i); i = method->formals->next(i))
+      {
+        // All of the formals will have already been pushed onto the stack by the dispatch call so we just need to set up the proper stack offset here
+        dynamic_bindings[method->formals->nth(i)->get_name()] = current_stack_size - stack_size_push - (method->formals->len() - i);
+      }
 
       // emit code for the method body
       method->get_expression()->code(str, current_node_ptr);
 
-      // restore s0/SELF register
-      emit_load(SELF, 1, SP, str);
-
-      // restore ra register
-      emit_load(RA, 2, SP, str);
-
-      // restore old sp from before the method was called, number of parameters + 1 for ra, 1 for fp, and 1 for s0/SELF
-      emit_addiu(SP, SP, (parameters->len() + 3) * WORD_SIZE, str);
-
-      // restore old frame pointer so that the function that called us will have the frame pointer back
-      emit_load(FP, 0, SP, str);
-
-      // jump to address in ra
-      emit_return(str);
-
-      // **** End method code generation ****
+      Formals parameters = method->get_parameters();
+      emit_method_suffix(str, parameters->len());
     }
   }
 }
@@ -887,9 +857,15 @@ void CgenNode::set_size_attributes_methods()
       }
       else
       {
+        
         method_class* method = static_cast<method_class*>(feature);
         MethodOwnerPair method_owner_pair = { method, current_parent->get_name() };
-        new_methods.push_back(method_owner_pair);
+        // If the method was defined in a baseclass we don't to replace the method definition with the super class one
+        if (method_name_map.find(method->get_name()) == method_name_map.end())
+        {
+          new_methods.push_back(method_owner_pair);
+        } 
+
         method_name_map[method->get_name()] = method_owner_pair;
       }
     }

@@ -48,8 +48,8 @@ int label_index  = 0;
 // and decreased whenever we emit code to pop a value from the stack
 int current_stack_size = 0;
 // To get the correct stack offset for a particular let binding do the following:
-// stack_size - let_bindings[let symbol]
-static std::map<Symbol, int> let_bindings;
+// stack_size - dynamic_bindings[let symbol]
+std::map<Symbol, int> dynamic_bindings;
 
 // constructors' functions
 Program program_class::copy_Program()
@@ -713,11 +713,45 @@ void assign_class::code(ostream &s, CgenNodeP cgen_node) {
 }
 
 void static_dispatch_class::code(ostream &s, CgenNodeP cgen_node) {
-
+  
 }
 
 void dispatch_class::code(ostream &s, CgenNodeP cgen_node) {
+   // Emit the code for the object we are dispatching to
+   expr->code(s, cgen_node);
 
+   // Dispatch object is now in ACC, we need to get the address for the method that we want to jump to
+
+   // Get the index into the dispatch table for this method
+   CgenNodeP dispatch_cgen_node = cgen_node->get_symbol_table()->lookup(expr->type);
+   int method_index = dispatch_cgen_node->get_method_location(name);
+   assert(method_index != -1);
+
+   // Load the address of the dispatch table into T0
+   emit_load(T0, 2, ACC, s);
+
+   // Add the offset for the method location in the dispatch table
+   emit_addiu(T0, T0, method_index * WORD_SIZE,  s);
+
+   // Method address is now loaded into T0
+   emit_load(T0, 0, T0, s);
+
+   // Push all of the parameters onto the stack
+   for(int i = actual->first(); actual->more(i); i = actual->next(i))
+   {
+      // Emit code for parameter expression
+      actual->nth(i)->code(s, cgen_node);
+
+      // Push the paramater object onto the stack
+      // todo: for the let and case statements I was calling object copy here but I think this is actually only needed if we are loading a proto-object into acc
+      emit_store(ACC, 0, SP, s);
+
+      // bump the stack pointer
+      emit_stack_size_push(1, s); // parameter n is at 
+   }
+
+   // Jal to the method definition
+   emit_jalr(T0, s);
 }
 
 void cond_class::code(ostream &s, CgenNodeP cgen_node) {
@@ -883,13 +917,14 @@ void typcase_class::code(ostream &s, CgenNodeP cgen_node) {
       // add the case statement definition to the scope
 
       // Now copy this object from the expression from acc a new location on the heap
+      // todo: I do not think this copy is needed, check this later
       emit_jal("Object.copy", s);
 
       // Push the result of the copy onto the stack
       emit_store(ACC, 0, SP, s);
 
       // Keep track of the case binding
-      let_bindings[caseBranch->get_name()] = current_stack_size;
+      dynamic_bindings[caseBranch->get_name()] = current_stack_size;
 
       // bump the stack pointer
       emit_stack_size_push(1, s);
@@ -909,7 +944,6 @@ void typcase_class::code(ostream &s, CgenNodeP cgen_node) {
    emit_label_def(case_finished_label, s);
 
    // If T3 is equal to 1 upon testing all of the branches it means there was no match
-   // todo: test this
    emit_addiu(T4, ZERO, 1, s);
    emit_beq(T3, T4, "_case_abort", s);
 }
@@ -944,7 +978,7 @@ void let_class::code(ostream &s, CgenNodeP cgen_node) {
    emit_store(ACC, 0, SP, s);
 
    // Keep track of the let binding
-   let_bindings[get_let_id()] = current_stack_size;
+   dynamic_bindings[get_let_id()] = current_stack_size;
 
    // bump the stack pointer
    emit_stack_size_push(1, s);
@@ -1213,15 +1247,15 @@ void no_expr_class::code(ostream &s, CgenNodeP cgen_node)
 
 void object_class::code(ostream &s, CgenNodeP cgen_node)
 {
-   // first check to see if there are any let variables with the given name
-   if (let_bindings.find(get_name()) != let_bindings.end())
+   // first check to see if there are any let, case, or parameters with the given name
+   if (dynamic_bindings.find(get_name()) != dynamic_bindings.end())
    {
       // if there are load the address into acc and return that
-      emit_load(ACC, current_stack_size - let_bindings[get_name()], SP, s);
+      emit_load(ACC, current_stack_size - dynamic_bindings[get_name()], SP, s);
    }
    else
    {
-      // else look for a matching attribute
+      // else look for a matching attribute in the class
       int attribute_location = cgen_node->get_attribute_location(get_name());
       emit_load(ACC, 3 + attribute_location, SELF, s);
    }

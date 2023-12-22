@@ -168,3 +168,6 @@ void emit_fetch_int(char *dest, char *source, ostream& s);
 void emit_store_int(char *source, char *dest, ostream& s);
 void emit_test_collector(ostream &s);
 void emit_gc_check(char *source, ostream &s);
+
+int emit_method_prefix(ostream &str);
+void emit_method_suffix(ostream &str, int parameter_count);

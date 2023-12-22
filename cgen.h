@@ -90,6 +90,7 @@ private:
 
    std::vector<MethodOwnerPair> methods;
    std::map<Symbol, MethodOwnerPair> method_name_map;
+   std::map<Symbol, int> method_location_map;
    std::vector<AttrOwnerPair> attributes;
    std::map<Symbol, AttrOwnerPair> attribute_name_map;
    std::map<Symbol, void*> let_symbol_map;
@@ -111,6 +112,13 @@ public:
    StringEntryP get_string_entry() { return string_entry; }
    void set_size_attributes_methods();
    int get_attribute_location(Symbol attribute_name);
+   int get_method_location(Symbol method_name) { 
+      return method_location_map.find(method_name) == method_location_map.end() ? -1 : method_location_map[method_name]; 
+   }
+   void set_method_location(Symbol method_name, int location) { method_location_map[method_name] = location; }
+   method_class* get_method(Symbol method_name) { 
+      return method_name_map.find(method_name) == method_name_map.end() ? nullptr : method_name_map[method_name].first; 
+   }
    std::vector<MethodOwnerPair> get_methods() const { return methods; }
    std::vector<AttrOwnerPair> get_attributes() const { return attributes; }
 };
