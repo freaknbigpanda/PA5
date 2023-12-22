@@ -714,56 +714,55 @@ void assign_class::code(ostream &s, CgenNodeP cgen_node) {
 
 void emit_dispatch(ostream &str, Expression expression, Symbol dispatch_type, Symbol method_name, Expressions parameters, CgenNodeP cgen_node)
 {
-  // Emit the code for the self object we are dispatching to
-  expression->code(str, cgen_node);
+   // Emit the code for the self object we are dispatching to
+   expression->code(str, cgen_node);
 
-  // Dispatch object is now in ACC, we need to get the address for the method that we want to jump to
+   // Dispatch object is now in ACC, we need to get the address for the method that we want to jump to
 
-  // Get the index into the dispatch table for this method
-  CgenNodeP dispatch_cgen_node = cgen_node->get_symbol_table()->lookup(dispatch_type);
-  int method_index = dispatch_cgen_node->get_method_location(method_name);
-  assert(method_index != -1);
+   // Get the index into the dispatch table for this method
+   Symbol expr_type = dispatch_type == SELF_TYPE ? cgen_node->get_name() : dispatch_type;
+   CgenNodeP dispatch_cgen_node = cgen_node->get_symbol_table()->lookup(expr_type);
+   int method_index = dispatch_cgen_node->get_method_location(method_name);
+   assert(method_index != -1);
 
-  // Load the proto obect for the dispatch type into T0 
-  emit_partial_load_address(T0, str);
-  emit_protobj_ref(dispatch_type, str);
-  str << endl;
+   // Load the proto obect for the dispatch type into T0 
+   emit_partial_load_address(T0, str);
+   emit_protobj_ref(dispatch_type, str);
+   str << endl;
 
-  // Load the address of the dispatch table into T0
-  emit_load(T0, 2, T0, str);
+   // Load the address of the dispatch table into T0
+   emit_load(T0, 2, T0, str);
 
-  // Add the offset for the method location in the dispatch table
-  emit_addiu(T0, T0, method_index * WORD_SIZE,  str);
+   // Add the offset for the method location in the dispatch table
+   emit_addiu(T0, T0, method_index * WORD_SIZE,  str);
 
-  // Method address is now loaded into T0
-  emit_load(T0, 0, T0, str);
+   // Method address is now loaded into T0
+   emit_load(T0, 0, T0, str);
 
-  // Push all of the parameters onto the stack
-  for(int i = parameters->first(); parameters->more(i); i = parameters->next(i))
-  {
-    // Emit code for parameter expression
-    parameters->nth(i)->code(str, cgen_node);
+   // Push all of the parameters onto the stack
+   for(int i = parameters->first(); parameters->more(i); i = parameters->next(i))
+   {
+      // Emit code for parameter expression
+      parameters->nth(i)->code(str, cgen_node);
 
-    // Push the paramater object onto the stack
-    // todo: for the let and case statements I was calling object copy here but I think this is actually only needed if we are loading a proto-object into acc
-    emit_store(ACC, 0, SP, str);
+      // Push the paramater object onto the stack
+      // todo: for the let and case statements I was calling object copy here but I think this is actually only needed if we are loading a proto-object into acc
+      emit_store(ACC, 0, SP, str);
 
-    // bump the stack pointer
-    emit_stack_size_push(1, str); // parameter n is at 
-  }
+      // bump the stack pointer
+      emit_stack_size_push(1, str); // parameter n is at 
+   }
 
-  // Jal to the method definition
-  emit_jalr(T0, str);
+   // Jal to the method definition
+   emit_jalr(T0, str);
 }
 
 void static_dispatch_class::code(ostream &s, CgenNodeP cgen_node) {
-   Symbol expr_type = type_name == SELF_TYPE ? cgen_node->get_name() : type_name;
-   emit_dispatch(s, expr, expr_type, name, actual, cgen_node);
+   emit_dispatch(s, expr, type_name, name, actual, cgen_node);
 }
 
 void dispatch_class::code(ostream &s, CgenNodeP cgen_node) {
-   Symbol expr_type = expr->type == SELF_TYPE ? cgen_node->get_name() : expr->type;
-   emit_dispatch(s, expr, expr_type, name, actual, cgen_node);
+   emit_dispatch(s, expr, expr->type, name, actual, cgen_node);
 }
 
 void cond_class::code(ostream &s, CgenNodeP cgen_node) {
@@ -1219,21 +1218,21 @@ void bool_const_class::code(ostream& s, CgenNodeP cgen_node)
 
 void new__class::code(ostream &s, CgenNodeP cgen_node)
 {
-  // todo: implement support for SELF_TYPE
+   Symbol class_to_create = type_name == SELF_TYPE ? cgen_node->get_name() : type_name; 
 
-  // Load the correct proto-object into ACC
-  emit_partial_load_address(ACC, s);
-  emit_protobj_ref(get_type_name(), s);
-  s << endl;
+   // Load the correct proto-object into ACC
+   emit_partial_load_address(ACC, s);
+   emit_protobj_ref(class_to_create, s);
+   s << endl;
 
-  // Copy the proto-object to the heap
-  // todo: don't really like this since if the method name changed this would break
-  emit_jal("Object.copy", s);
+   // Copy the proto-object to the heap
+   // todo: don't really like this since if the method name changed this would break
+   emit_jal("Object.copy", s);
 
-  // Invoke initialization method on the object that we just allocated
-  std::stringstream init_method_ref;
-  emit_init_ref(get_type_name(), init_method_ref);
-  emit_jal(init_method_ref.str().c_str(), s);
+   // Invoke initialization method on the object that we just allocated
+   std::stringstream init_method_ref;
+   emit_init_ref(class_to_create, init_method_ref);
+   emit_jal(init_method_ref.str().c_str(), s);
 }
 
 void isvoid_class::code(ostream &s, CgenNodeP cgen_node)
@@ -1259,7 +1258,7 @@ void no_expr_class::code(ostream &s, CgenNodeP cgen_node)
 
 void object_class::code(ostream &s, CgenNodeP cgen_node)
 {
-   if (get_name() == self)
+   if (get_name() == self) 
    {
       //todo: I am a bit worried here because I don't know if S0 will always store a pointer to self or not
       //todo: Convince yourself that S0 will always contain a pointer to self

@@ -621,6 +621,9 @@ void CgenClassTable::code_object_methods()
 
       int stack_size_push = emit_method_prefix(str);
 
+      // Save the value of self, which is stored in ACC on method entry, into register S0
+      emit_move(SELF, ACC, str);
+
       // Add bindings for all of the formal identifiers
       for(int i = method->formals->first(); method->formals->more(i); i = method->formals->next(i))
       {
