@@ -57,41 +57,27 @@ void cgen(ostream&);     			\
 void dump_with_types(ostream&, int);            
 
 #define Class__EXTRAS                   \
-virtual Symbol get_name() = 0;  	\
-virtual Symbol get_parent() = 0;    	\
+virtual Symbol get_name() = 0;			\
 virtual Symbol get_filename() = 0;      \
-virtual void dump_with_types(ostream&,int) = 0;	\
-virtual Features get_features() = 0;
+virtual void dump_with_types(ostream&,int) = 0;
 
-
-#define class__EXTRAS                                  \
-Symbol get_name()   { return name; }		       \
-Symbol get_parent() { return parent; }     	       \
+#define class__EXTRAS                   \
+Symbol get_name()   { return name; }	\
 Symbol get_filename() { return filename; }             \
-void dump_with_types(ostream&,int);	\
-Features get_features() { return features; }	                 
-
+void dump_with_types(ostream&,int);	
 
 #define Feature_EXTRAS                                        \
 virtual void dump_with_types(ostream&,int) = 0;	\
-virtual bool is_attr() = 0; \
-virtual Expression get_expression() = 0; \
-virtual Symbol get_name() = 0;
+virtual bool is_attr() = 0; 
 
 #define Feature_SHARED_EXTRAS                                       \
 void dump_with_types(ostream&,int);
 
 #define attr_EXTRAS \
-bool is_attr() { return true; } \
-Expression get_expression() { return init; }	\
-Symbol get_declared_type() { return type_decl; }	\
-Symbol get_name() { return name; }
+bool is_attr() { return true; } 
 
 #define method_EXTRAS \
-bool is_attr() { return false; }	\
-Expression get_expression() { return expr; }	\
-Symbol get_name() { return name; } \
-Formals get_parameters() { return formals; }
+bool is_attr() { return false; }	
 
 #define Formal_EXTRAS                              \
 virtual void dump_with_types(ostream&,int) = 0; \
@@ -101,19 +87,13 @@ virtual Symbol get_type() = 0;
 #define formal_EXTRAS                           \
 void dump_with_types(ostream&,int);	\
 Symbol get_name() { return name; } \
-Symbol get_type() { return type_decl; } 
-
+Symbol get_type() { return type_decl; } \
 
 #define Case_EXTRAS                             \
-virtual void dump_with_types(ostream& ,int) = 0;
-
+virtual void dump_with_types(ostream& ,int) = 0;\
 
 #define branch_EXTRAS                                   \
-void dump_with_types(ostream& ,int); \
-Symbol get_name() { return name; };	\
-Symbol get_type() { return type_decl; }	\
-Expression get_expr() { return expr; }
-
+void dump_with_types(ostream& ,int);	\
 
 #define Expression_EXTRAS                    \
 Symbol type;                                 \
@@ -126,77 +106,6 @@ Expression_class() { type = (Symbol) NULL; }	\
 
 #define Expression_SHARED_EXTRAS           \
 void code(ostream&, CgenNode*); 			   \
-void dump_with_types(ostream&,int); 
-
-#define object_EXTRAS                                   \
-Symbol get_name() { return name; }
-
-#define plus_EXTRAS	\
-Expression get_lhs() { return e1; } \
-Expression get_rhs() { return e2; }
-
-#define sub_EXTRAS	\
-Expression get_lhs() { return e1; } \
-Expression get_rhs() { return e2; }
-
-#define mul_EXTRAS	\
-Expression get_lhs() { return e1; } \
-Expression get_rhs() { return e2; }
-
-#define divide_EXTRAS	\
-Expression get_lhs() { return e1; } \
-Expression get_rhs() { return e2; }
-
-#define neg_EXTRAS	\
-Expression get_rhs() { return e1; }
-
-#define lt_EXTRAS	\
-Expression get_lhs() { return e1; } \
-Expression get_rhs() { return e2; }
-
-#define eq_EXTRAS	\
-Expression get_lhs() { return e1; } \
-Expression get_rhs() { return e2; }
-
-#define leq_EXTRAS	\
-Expression get_lhs() { return e1; } \
-Expression get_rhs() { return e2; }
-
-#define comp_EXTRAS	\
-Expression get_rhs() { return e1; }
-
-#define isvoid_EXTRAS	\
-Expression get_rhs() { return e1; }
-
-#define new__EXTRAS	\
-Symbol get_type_name() { return type_name; }
-
-#define block_EXTRAS	\
-Expressions get_body() { return body; };
-
-#define loop_EXTRAS	\
-Expression get_pred() { return pred; }	\
-Expression get_body() { return body; }
-
-#define assign_EXTRAS	\
-Symbol get_symbol_name() { return name; }	\
-Expression get_expr() { return expr; }
-
-#define let_EXTRAS	\
-Symbol get_let_id() { return identifier; }	\
-Symbol get_let_type_decl() { return type_decl; }	\
-Expression get_let_init() { return init; }	\
-Expression get_let_body() { return body; }	
-
-#define cond_EXTRAS	\
-Expression get_pred() { return pred; }	\
-Expression get_then() { return then_exp; }	\
-Expression get_else() { return else_exp; }
-
-#define typcase_EXTRAS	\
-Expression get_case_expr() { return expr; }	\
-Cases get_cases() { return cases; }
-
-// todo: I don't need any of these methods lol
+void dump_with_types(ostream&,int); \
 
 #endif

@@ -405,17 +405,17 @@ void CgenClassTable::code_prototype_objects()
 {
   for(auto it = cgen_nodes_for_tag.cbegin(); it != cgen_nodes_for_tag.cend(); ++it)
   {
-    if ((*it).second->get_name() == Bool) continue; // No need for bool protoobject since we already have the true and false consts
+    if ((*it).second->name == Bool) continue; // No need for bool protoobject since we already have the true and false consts
 
     // Apparently for garbage collection, need -1 in object address -4 (see cool-runtime.pdf)
     str << WORD << "-1" << endl;
 
     CgenNode* current_node_ptr = (*it).second;
-    emit_protobj_ref(current_node_ptr->get_name(), str);
+    emit_protobj_ref(current_node_ptr->name, str);
     str << ":" << endl;
     str << WORD << current_node_ptr->get_tag() << endl;
     str << WORD << current_node_ptr->get_size() << endl;
-    str << WORD << current_node_ptr->get_name() << DISPTAB_SUFFIX << endl;
+    str << WORD << current_node_ptr->name << DISPTAB_SUFFIX << endl;
 
     std::vector<AttrOwnerPair> attributes = current_node_ptr->get_attributes();
     for (auto it = attributes.cbegin(); it != attributes.cend(); ++it)
@@ -423,7 +423,7 @@ void CgenClassTable::code_prototype_objects()
       attr_class* attribute = (*it).first;
 
       str << WORD;
-      Symbol attribute_type = attribute->get_declared_type();
+      Symbol attribute_type = attribute->type_decl;
       if (attribute_type == Int)
       {
         IntEntry* const_entry = inttable.lookup_string("0");
@@ -465,14 +465,14 @@ void CgenClassTable::code_obj_table()
   str << CLASSOBJTAB << ":" << endl;
   for(auto it = cgen_nodes_for_tag.cbegin(); it != cgen_nodes_for_tag.cend(); ++it)
   {
-    if ((*it).second->get_name() == Bool) continue; // No bool proto object exists since we already have the true and false consts
+    if ((*it).second->name == Bool) continue; // No bool proto object exists since we already have the true and false consts
 
     str << WORD;
     CgenNode* current_node_ptr = (*it).second;
-    emit_protobj_ref(current_node_ptr->get_name(), str);
+    emit_protobj_ref(current_node_ptr->name, str);
     str << endl;
     str << WORD;
-    emit_init_ref(current_node_ptr->get_name(), str);
+    emit_init_ref(current_node_ptr->name, str);
     str << endl;
   }
 }
@@ -483,7 +483,7 @@ void CgenClassTable::code_inheritance_table()
   {
     CgenNodeP current_parent = (*it).second;
 
-    emit_inhertable_ref(current_parent->get_name(), str);
+    emit_inhertable_ref(current_parent->name, str);
     str << ":" << endl;
 
     while (current_parent != nullptr) 
@@ -508,7 +508,7 @@ void CgenClassTable::code_class_tag_table()
     // there is an assumption that the current class increases by one for each class
     if (current_class_tag != current_node->get_tag()) abort();
 
-    str << WORD << current_node->get_name() << INHERTAB_SUFFIX << endl;
+    str << WORD << current_node->name << INHERTAB_SUFFIX << endl;
   }
 }
 
@@ -518,17 +518,17 @@ void CgenClassTable::code_dispatch_table()
   {
     CgenNode* current_node_ptr = (*it).second;
 
-    emit_disptable_ref(current_node_ptr->get_name(), str);
+    emit_disptable_ref(current_node_ptr->name, str);
     str << ":" << endl;
 
     std::vector<MethodOwnerPair> methods = current_node_ptr->get_methods();
     for (auto it = methods.cbegin(); it != methods.cend(); ++it)
     {
       str << WORD;
-      emit_method_ref((*it).second, (*it).first->get_name(), str);
+      emit_method_ref((*it).second, (*it).first->name, str);
       str << endl;
       int method_index = it - methods.begin();
-      current_node_ptr->set_method_location((*it).first->get_name(), method_index);
+      current_node_ptr->set_method_location((*it).first->name, method_index);
     }
   }
 }
@@ -539,7 +539,7 @@ void CgenClassTable::code_object_initializers()
   for(auto it = cgen_nodes_for_tag.cbegin(); it != cgen_nodes_for_tag.cend(); ++it)
   {
     CgenNode* current_node_ptr = (*it).second;
-    emit_init_ref(current_node_ptr->get_name(), str);
+    emit_init_ref(current_node_ptr->name, str);
     str << ":" << endl;
 
     emit_method_prefix(str);
@@ -548,10 +548,10 @@ void CgenClassTable::code_object_initializers()
     emit_move(SELF, ACC, str);
     
 
-    if (current_node_ptr->get_name() != Object)
+    if (current_node_ptr->name != Object)
     {
       std::stringstream init_ref;
-      emit_init_ref(current_node_ptr->get_parent(), init_ref);
+      emit_init_ref(current_node_ptr->parent, init_ref);
       emit_jal(init_ref.str().c_str(), str);
     }
 
@@ -562,8 +562,8 @@ void CgenClassTable::code_object_initializers()
     {
       attr_class* attribute = (*it).first;
 
-      Expression init_expr = attribute->get_expression();
-      Symbol attr_type = attribute->get_declared_type();
+      Expression init_expr = attribute->init;
+      Symbol attr_type = attribute->type_decl;
       bool isBasic = (attr_type == Int || attr_type == Str);
 
       // If the type is an Int or String and there is no expression, init with default proto-obj, otherwise emit code for the initialization expression
@@ -585,7 +585,7 @@ void CgenClassTable::code_object_initializers()
       {
         // Emit code for attribute initialization
         // Note: this will copy zero into ACC for no_expr_class
-        attribute->get_expression()->code(str, current_node_ptr);
+        attribute->init->code(str, current_node_ptr);
       }
 
       // Store the result of the attribute initialization in the correct location in the heap
@@ -613,10 +613,10 @@ void CgenClassTable::code_object_methods()
     for (auto it = methods.cbegin(); it != methods.cend(); ++it)
     {
       // We don't need to emit method definitions for methods that are previously defined by a parent class
-      if ((*it).second != current_node_ptr->get_name()) continue;
+      if ((*it).second != current_node_ptr->name) continue;
 
       method_class* method = (*it).first;
-      emit_method_ref(current_node_ptr->get_name(), method->get_name(), str);
+      emit_method_ref(current_node_ptr->name, method->name, str);
       str << ":" << endl;
 
       int stack_size_push = emit_method_prefix(str);
@@ -632,9 +632,9 @@ void CgenClassTable::code_object_methods()
       }
 
       // emit code for the method body
-      method->get_expression()->code(str, current_node_ptr);
+      method->expr->code(str, current_node_ptr);
 
-      Formals parameters = method->get_parameters();
+      Formals parameters = method->formals;
       emit_method_suffix(str, parameters->len());
     }
   }
@@ -769,7 +769,7 @@ void CgenClassTable::install_basic_classes()
 //
 void CgenClassTable::install_class(CgenNodeP nd)
 {
-  Symbol name = nd->get_name();
+  Symbol name = nd->name;
 
   if (probe(name))
     {
@@ -819,7 +819,7 @@ void CgenClassTable::build_inheritance_tree()
 //
 void CgenClassTable::set_relations(CgenNodeP nd)
 {
-  CgenNode *parent_node = probe(nd->get_parent());
+  CgenNode *parent_node = probe(nd->parent);
   nd->set_parentnd(parent_node);
   parent_node->add_child(nd);
 }
@@ -854,22 +854,22 @@ void CgenNode::set_size_attributes_methods()
       {
         size++;
         attr_class* attribute = static_cast<attr_class*>(feature);
-        AttrOwnerPair attribute_owner_pair = { attribute, current_parent->get_name() };
+        AttrOwnerPair attribute_owner_pair = { attribute, current_parent->name };
         new_attributes.push_back(attribute_owner_pair);
-        attribute_name_map[attribute->get_name()] = attribute_owner_pair;
+        attribute_name_map[attribute->name] = attribute_owner_pair;
       }
       else
       {
         
         method_class* method = static_cast<method_class*>(feature);
-        MethodOwnerPair method_owner_pair = { method, current_parent->get_name() };
+        MethodOwnerPair method_owner_pair = { method, current_parent->name };
         // If the method was defined in a baseclass we don't to replace the method definition with the super class one
-        if (method_name_map.find(method->get_name()) == method_name_map.end())
+        if (method_name_map.find(method->name) == method_name_map.end())
         {
           new_methods.push_back(method_owner_pair);
         } 
 
-        method_name_map[method->get_name()] = method_owner_pair;
+        method_name_map[method->name] = method_owner_pair;
       }
     }
 

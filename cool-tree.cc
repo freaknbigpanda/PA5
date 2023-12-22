@@ -707,8 +707,8 @@ Expression object(Symbol name)
 //*****************************************************************
 
 void assign_class::code(ostream &s, CgenNodeP cgen_node) {
-   get_expr()->code(s, cgen_node);
-   int attribute_location = cgen_node->get_attribute_location(get_symbol_name());
+   expr->code(s, cgen_node);
+   int attribute_location = cgen_node->get_attribute_location(name);
    emit_store(ACC, 3 + attribute_location, SELF, s);
 }
 
@@ -720,7 +720,7 @@ void emit_dispatch(ostream &str, Expression expression, Symbol dispatch_type, Sy
    // Dispatch object is now in ACC, we need to get the address for the method that we want to jump to
 
    // Get the index into the dispatch table for this method
-   Symbol expr_type = dispatch_type == SELF_TYPE ? cgen_node->get_name() : dispatch_type;
+   Symbol expr_type = dispatch_type == SELF_TYPE ? cgen_node->name : dispatch_type;
    CgenNodeP dispatch_cgen_node = cgen_node->get_symbol_table()->lookup(expr_type);
    int method_index = dispatch_cgen_node->get_method_location(method_name);
    assert(method_index != -1);
@@ -772,7 +772,7 @@ void cond_class::code(ostream &s, CgenNodeP cgen_node) {
 
    // first emit the code to evaluate the predicate
    emit_label_def(evaluate_pred_label, s);
-   get_pred()->code(s, cgen_node);
+   pred->code(s, cgen_node);
 
    // after the predicate is evaluated we need to test to see if it is true or false
    // to do that we:
@@ -794,12 +794,12 @@ void cond_class::code(ostream &s, CgenNodeP cgen_node) {
    // Jump to else if false
    emit_beq(ACC, ZERO, else_label, s);
    // evaluate the then block if true
-   get_then()->code(s, cgen_node);
+   then_exp->code(s, cgen_node);
    emit_jump(exit_label, s);
 
    emit_label_def(else_label, s);
    // evaluate else block if false
-   get_else()->code(s, cgen_node);
+   else_exp->code(s, cgen_node);
 
    emit_label_def(exit_label, s);
 }
@@ -811,7 +811,7 @@ void loop_class::code(ostream &s, CgenNodeP cgen_node) {
 
    // first emit the code to evaluate the predicate
    emit_label_def(evaluate_pred_label, s);
-   get_pred()->code(s, cgen_node);
+   pred->code(s, cgen_node);
 
    // after the predicate is evaluated we need to test to see if it is true or false
    // to do that we:
@@ -843,7 +843,7 @@ void loop_class::code(ostream &s, CgenNodeP cgen_node) {
 
 void typcase_class::code(ostream &s, CgenNodeP cgen_node) {
    // First emit code to generate the predicate
-   get_case_expr()->code(s, cgen_node);
+   expr->code(s, cgen_node);
 
    // todo: test this
    // if the predicate is null jump to case abort2
@@ -869,15 +869,15 @@ void typcase_class::code(ostream &s, CgenNodeP cgen_node) {
 
    std::vector<branch_class*> case_branches;
    // Sorting the branch objects based on their inheritance distance to object
-   for(int i = get_cases()->first(); get_cases()->more(i); i = get_cases()->next(i))
+   for(int i = cases->first(); cases->more(i); i = cases->next(i))
    {
-      case_branches.push_back(static_cast<branch_class*>(get_cases()->nth(i)));
+      case_branches.push_back(static_cast<branch_class*>(cases->nth(i)));
    }
 
    // Now for each of these branches I need to sort them based on their inheritance 
    std::sort(case_branches.begin(), case_branches.end(), [cgen_node](branch_class* first, branch_class* second) {
-      CgenNodeP first_branch_type = cgen_node->get_symbol_table()->lookup(first->get_type());
-      CgenNodeP second_branch_type = cgen_node->get_symbol_table()->lookup(second->get_type());
+      CgenNodeP first_branch_type = cgen_node->get_symbol_table()->lookup(first->type_decl);
+      CgenNodeP second_branch_type = cgen_node->get_symbol_table()->lookup(second->type_decl);
 
       return first_branch_type->get_inheritance_depth() > second_branch_type->get_inheritance_depth();
    });
@@ -898,7 +898,7 @@ void typcase_class::code(ostream &s, CgenNodeP cgen_node) {
 
       // Load the proto obj address into T2
       emit_partial_load_address(T2, s);
-      emit_protobj_ref(caseBranch->get_type(), s);
+      emit_protobj_ref(caseBranch->type_decl, s);
       s << endl;
 
       // Load the class tag for this object into T2
@@ -935,13 +935,13 @@ void typcase_class::code(ostream &s, CgenNodeP cgen_node) {
       emit_store(ACC, 0, SP, s);
 
       // Keep track of the case binding
-      dynamic_bindings[caseBranch->get_name()] = current_stack_size;
+      dynamic_bindings[caseBranch->name] = current_stack_size;
 
       // bump the stack pointer
       emit_stack_size_push(1, s);
 
       // code gen for the case statement branch
-      caseBranch->get_expr()->code(s, cgen_node);
+      caseBranch->expr->code(s, cgen_node);
 
       // Restore the stack pointer
       emit_stack_size_pop(1, s);
@@ -960,25 +960,23 @@ void typcase_class::code(ostream &s, CgenNodeP cgen_node) {
 }
 
 void block_class::code(ostream &s, CgenNodeP cgen_node) {
-   for(int i = get_body()->first(); get_body()->more(i); i = get_body()->next(i))
+   for(int i = body->first(); body->more(i); i = body->next(i))
    {
-      get_body()->nth(i)->code(s, cgen_node);
+      body->nth(i)->code(s, cgen_node);
    }
 }
 
 void let_class::code(ostream &s, CgenNodeP cgen_node) {
-   Expression let_init = get_let_init();
-
-   if (dynamic_cast<no_expr_class*>(let_init) == nullptr)
+   if (dynamic_cast<no_expr_class*>(init) == nullptr)
    {
       // If we have an init expr then evaluate the rhs
-      let_init->code(s, cgen_node);
+      init->code(s, cgen_node);
    }
    else
    {
       // If not then load the default proto-obj for this object
       emit_partial_load_address(ACC, s);
-      emit_protobj_ref(get_let_type_decl(), s);
+      emit_protobj_ref(type_decl, s);
       s << endl;
    }
 
@@ -989,13 +987,13 @@ void let_class::code(ostream &s, CgenNodeP cgen_node) {
    emit_store(ACC, 0, SP, s);
 
    // Keep track of the let binding
-   dynamic_bindings[get_let_id()] = current_stack_size;
+   dynamic_bindings[identifier] = current_stack_size;
 
    // bump the stack pointer
    emit_stack_size_push(1, s);
 
    // Then evaluate the body of the let
-   get_let_body()->code(s, cgen_node);
+   body->code(s, cgen_node);
 
    // Restore the stack pointer
    emit_stack_size_pop(1, s);
@@ -1059,7 +1057,7 @@ static void emit_binary_op_suffix(Symbol return_type, ostream &s)
 
 void plus_class::code(ostream &s, CgenNodeP cgen_node)
 {
-  emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
+  emit_binary_op_prefix(e1, e2, s, cgen_node);
 
   // add T1 + T2
   emit_add(T2, T1, T2, s);
@@ -1069,7 +1067,7 @@ void plus_class::code(ostream &s, CgenNodeP cgen_node)
 
 void sub_class::code(ostream &s, CgenNodeP cgen_node)
 {
-  emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
+  emit_binary_op_prefix(e1, e2, s, cgen_node);
 
   // sub T1 - T2
   emit_sub(T2, T1, T2, s);
@@ -1079,7 +1077,7 @@ void sub_class::code(ostream &s, CgenNodeP cgen_node)
 
 void mul_class::code(ostream &s, CgenNodeP cgen_node)
 {
-  emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
+  emit_binary_op_prefix(e1, e2, s, cgen_node);
 
   // mul T1 * T2
   emit_mul(T2, T1, T2, s);
@@ -1089,7 +1087,7 @@ void mul_class::code(ostream &s, CgenNodeP cgen_node)
 
 void divide_class::code(ostream &s, CgenNodeP cgen_node)
 {
-  emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
+  emit_binary_op_prefix(e1, e2, s, cgen_node);
 
   // mul T1 / T2
   emit_div(T2, T1, T2, s);
@@ -1099,7 +1097,7 @@ void divide_class::code(ostream &s, CgenNodeP cgen_node)
 
 void neg_class::code(ostream &s, CgenNodeP cgen_node)
 {
-    get_rhs()->code(s, cgen_node);
+    e1->code(s, cgen_node);
 
     // Load the int value into ACC
     emit_load(ACC, 3, ACC, s);
@@ -1116,7 +1114,7 @@ void neg_class::code(ostream &s, CgenNodeP cgen_node)
 
 void lt_class::code(ostream &s, CgenNodeP cgen_node)
 {
-   emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
+   emit_binary_op_prefix(e1, e2, s, cgen_node);
    int true_branch_label = label_index++;
    int false_branch_label = label_index++;
 
@@ -1132,7 +1130,7 @@ void lt_class::code(ostream &s, CgenNodeP cgen_node)
 
 void leq_class::code(ostream &s, CgenNodeP cgen_node)
 {
-   emit_binary_op_prefix(get_lhs(), get_rhs(), s, cgen_node);
+   emit_binary_op_prefix(e1, e2, s, cgen_node);
    int true_branch_label = label_index++;
    int false_branch_label = label_index++;
 
@@ -1148,12 +1146,12 @@ void leq_class::code(ostream &s, CgenNodeP cgen_node)
 
 void eq_class::code(ostream &s, CgenNodeP cgen_node)
 {
-  get_lhs()->code(s, cgen_node);
+  e1->code(s, cgen_node);
   // Push result of LHS onto the stack
   emit_store(ACC, 0, SP, s);
   emit_stack_size_push(1, s);
 
-  get_rhs()->code(s, cgen_node);
+  e2->code(s, cgen_node);
   // move RHS into T2
   emit_move(T2, ACC, s);
   // load LHS into T1
@@ -1178,7 +1176,7 @@ void comp_class::code(ostream &s, CgenNodeP cgen_node)
    int false_label = label_index++;
    int true_label = label_index++;
    // this produces a bool value in acc
-   get_rhs()->code(s, cgen_node);
+   e1->code(s, cgen_node);
 
    // Load the bool value into ACC
    emit_load(ACC, 3, ACC, s);
@@ -1218,7 +1216,7 @@ void bool_const_class::code(ostream& s, CgenNodeP cgen_node)
 
 void new__class::code(ostream &s, CgenNodeP cgen_node)
 {
-   Symbol class_to_create = type_name == SELF_TYPE ? cgen_node->get_name() : type_name; 
+   Symbol class_to_create = type_name == SELF_TYPE ? cgen_node->name : type_name; 
 
    // Load the correct proto-object into ACC
    emit_partial_load_address(ACC, s);
@@ -1237,7 +1235,7 @@ void new__class::code(ostream &s, CgenNodeP cgen_node)
 
 void isvoid_class::code(ostream &s, CgenNodeP cgen_node)
 {
-  get_rhs()->code(s, cgen_node);
+  e1->code(s, cgen_node);
 
   int zero_label = label_index++;
   int one_label = label_index++;
@@ -1258,22 +1256,22 @@ void no_expr_class::code(ostream &s, CgenNodeP cgen_node)
 
 void object_class::code(ostream &s, CgenNodeP cgen_node)
 {
-   if (get_name() == self) 
+   if (name == self) 
    {
       //todo: I am a bit worried here because I don't know if S0 will always store a pointer to self or not
       //todo: Convince yourself that S0 will always contain a pointer to self
       emit_move(ACC, SELF, s);
    } 
    // check to see if there are any let, case, or parameters with the given name
-   else if (dynamic_bindings.find(get_name()) != dynamic_bindings.end()) 
+   else if (dynamic_bindings.find(name) != dynamic_bindings.end()) 
    {
       // if there are load the address into acc and return that
-      emit_load(ACC, current_stack_size - dynamic_bindings[get_name()], SP, s);
+      emit_load(ACC, current_stack_size - dynamic_bindings[name], SP, s);
    }
    else
    {
       // else look for a matching attribute in the class
-      int attribute_location = cgen_node->get_attribute_location(get_name());
+      int attribute_location = cgen_node->get_attribute_location(name);
       emit_load(ACC, 3 + attribute_location, SELF, s);
    }
 }
