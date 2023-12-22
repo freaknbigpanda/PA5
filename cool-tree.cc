@@ -712,46 +712,58 @@ void assign_class::code(ostream &s, CgenNodeP cgen_node) {
    emit_store(ACC, 3 + attribute_location, SELF, s);
 }
 
+void emit_dispatch(ostream &str, Expression expression, Symbol dispatch_type, Symbol method_name, Expressions parameters, CgenNodeP cgen_node)
+{
+  // Emit the code for the self object we are dispatching to
+  expression->code(str, cgen_node);
+
+  // Dispatch object is now in ACC, we need to get the address for the method that we want to jump to
+
+  // Get the index into the dispatch table for this method
+  CgenNodeP dispatch_cgen_node = cgen_node->get_symbol_table()->lookup(dispatch_type);
+  int method_index = dispatch_cgen_node->get_method_location(method_name);
+  assert(method_index != -1);
+
+  // Load the proto obect for the dispatch type into T0 
+  emit_partial_load_address(T0, str);
+  emit_protobj_ref(dispatch_type, str);
+  str << endl;
+
+  // Load the address of the dispatch table into T0
+  emit_load(T0, 2, T0, str);
+
+  // Add the offset for the method location in the dispatch table
+  emit_addiu(T0, T0, method_index * WORD_SIZE,  str);
+
+  // Method address is now loaded into T0
+  emit_load(T0, 0, T0, str);
+
+  // Push all of the parameters onto the stack
+  for(int i = parameters->first(); parameters->more(i); i = parameters->next(i))
+  {
+    // Emit code for parameter expression
+    parameters->nth(i)->code(str, cgen_node);
+
+    // Push the paramater object onto the stack
+    // todo: for the let and case statements I was calling object copy here but I think this is actually only needed if we are loading a proto-object into acc
+    emit_store(ACC, 0, SP, str);
+
+    // bump the stack pointer
+    emit_stack_size_push(1, str); // parameter n is at 
+  }
+
+  // Jal to the method definition
+  emit_jalr(T0, str);
+}
+
 void static_dispatch_class::code(ostream &s, CgenNodeP cgen_node) {
-  
+   Symbol expr_type = type_name == SELF_TYPE ? cgen_node->get_name() : type_name;
+   emit_dispatch(s, expr, expr_type, name, actual, cgen_node);
 }
 
 void dispatch_class::code(ostream &s, CgenNodeP cgen_node) {
-   // Emit the code for the object we are dispatching to
-   expr->code(s, cgen_node);
-
-   // Dispatch object is now in ACC, we need to get the address for the method that we want to jump to
-
-   // Get the index into the dispatch table for this method
-   CgenNodeP dispatch_cgen_node = cgen_node->get_symbol_table()->lookup(expr->type);
-   int method_index = dispatch_cgen_node->get_method_location(name);
-   assert(method_index != -1);
-
-   // Load the address of the dispatch table into T0
-   emit_load(T0, 2, ACC, s);
-
-   // Add the offset for the method location in the dispatch table
-   emit_addiu(T0, T0, method_index * WORD_SIZE,  s);
-
-   // Method address is now loaded into T0
-   emit_load(T0, 0, T0, s);
-
-   // Push all of the parameters onto the stack
-   for(int i = actual->first(); actual->more(i); i = actual->next(i))
-   {
-      // Emit code for parameter expression
-      actual->nth(i)->code(s, cgen_node);
-
-      // Push the paramater object onto the stack
-      // todo: for the let and case statements I was calling object copy here but I think this is actually only needed if we are loading a proto-object into acc
-      emit_store(ACC, 0, SP, s);
-
-      // bump the stack pointer
-      emit_stack_size_push(1, s); // parameter n is at 
-   }
-
-   // Jal to the method definition
-   emit_jalr(T0, s);
+   Symbol expr_type = expr->type == SELF_TYPE ? cgen_node->get_name() : expr->type;
+   emit_dispatch(s, expr, expr_type, name, actual, cgen_node);
 }
 
 void cond_class::code(ostream &s, CgenNodeP cgen_node) {
@@ -1247,8 +1259,14 @@ void no_expr_class::code(ostream &s, CgenNodeP cgen_node)
 
 void object_class::code(ostream &s, CgenNodeP cgen_node)
 {
-   // first check to see if there are any let, case, or parameters with the given name
-   if (dynamic_bindings.find(get_name()) != dynamic_bindings.end())
+   if (get_name() == self)
+   {
+      //todo: I am a bit worried here because I don't know if S0 will always store a pointer to self or not
+      //todo: Convince yourself that S0 will always contain a pointer to self
+      emit_move(ACC, SELF, s);
+   } 
+   // check to see if there are any let, case, or parameters with the given name
+   else if (dynamic_bindings.find(get_name()) != dynamic_bindings.end()) 
    {
       // if there are load the address into acc and return that
       emit_load(ACC, current_stack_size - dynamic_bindings[get_name()], SP, s);
