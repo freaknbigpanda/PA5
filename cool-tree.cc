@@ -712,6 +712,20 @@ void assign_class::code(ostream &s, CgenNodeP cgen_node) {
    emit_store(ACC, 3 + attribute_location, SELF, s);
 }
 
+// Loads filename into a0 and linenumber into t1 for abort messages
+void emit_load_filename_and_line_number(ostream &s, Expression  expr, CgenNodeP cgen_node)
+{
+   // Load filename into a0
+   std::stringstream filename_string_stream;
+   std::string filename = cgen_node->get_filename()->get_string();
+   StringEntry* string_entry = stringtable.lookup_string(filename.c_str());
+   string_entry->code_ref(filename_string_stream);
+   emit_load_address(ACC, filename_string_stream.str().c_str(), s);
+
+   // Load line number in T1
+   emit_load_imm(T1, expr->get_line_number(), s);
+}
+
 // Goal: 
 // The SELF register SO should always point to the object that contains the attribute defiintions for the method we are currently executing
 // This means that SELF should be setup on object init and on dispatch
@@ -726,15 +740,7 @@ void emit_dispatch(ostream &str, Expression expression, Symbol dispatch_type, Sy
    // If ACC == ZERO load line number in t1 and filename in a0 and call _dispatch_abort
    emit_bne(ACC, ZERO, continue_dispatch, str);
 
-   // Load filename into a0
-   std::stringstream filename_string_stream;
-   std::string filename = cgen_node->get_filename()->get_string();
-   StringEntry* string_entry = stringtable.lookup_string(filename.c_str());
-   string_entry->code_ref(filename_string_stream);
-   emit_load_address(ACC, filename_string_stream.str().c_str(), str);
-
-   // Load line number in T1
-   emit_load_imm(T1, expression->get_line_number(), str);
+   emit_load_filename_and_line_number(str, expression, cgen_node);
    
    // Jump to dispatch abort
    emit_jump("_dispatch_abort", str);
@@ -867,9 +873,17 @@ void typcase_class::code(ostream &s, CgenNodeP cgen_node) {
    // First emit code to generate the predicate
    expr->code(s, cgen_node);
 
-   // todo: test this
-   // if the predicate is null jump to case abort2
-   emit_beq(ACC, ZERO, "_case_abort2", s);
+   int continue_case = label_index++;
+
+   // If ACC == ZERO load line number in t1 and filename in a0 and call _case_abort2
+   emit_bne(ACC, ZERO, continue_case, s);
+
+   emit_load_filename_and_line_number(s, expr, cgen_node);
+   
+   emit_jump("_case_abort2", s);
+
+   // If the predicate was not void continue with the case state
+   emit_label_def(continue_case, s);
 
    // First get the class tag for the case expression class
    emit_load(T1, 0, ACC, s);
