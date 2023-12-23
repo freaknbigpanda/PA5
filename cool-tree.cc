@@ -712,13 +712,35 @@ void assign_class::code(ostream &s, CgenNodeP cgen_node) {
    emit_store(ACC, 3 + attribute_location, SELF, s);
 }
 
+// Goal: 
+// The SELF register SO should always point to the object that contains the attribute defiintions for the method we are currently executing
+// This means that SELF should be setup on object init and on dispatch
+
 void emit_dispatch(ostream &str, Expression expression, Symbol dispatch_type, Symbol method_name, Expressions parameters, CgenNodeP cgen_node)
 {
    // Emit the code for the self object we are dispatching to
    expression->code(str, cgen_node);
 
-   // Dispatch object is now in ACC, we need to get the address for the method that we want to jump to
+   int continue_dispatch = label_index++;
 
+   // If ACC == ZERO load line number in t1 and filename in a0 and call _dispatch_abort
+   emit_bne(ACC, ZERO, continue_dispatch, str);
+
+   // Load filename into a0
+   std::stringstream filename_string_stream;
+   std::string filename = cgen_node->get_filename()->get_string();
+   StringEntry* string_entry = stringtable.lookup_string(filename.c_str());
+   string_entry->code_ref(filename_string_stream);
+   emit_load_address(ACC, filename_string_stream.str().c_str(), str);
+
+   // Load line number in T1
+   emit_load_imm(T1, expression->get_line_number(), str);
+   
+   // Jump to dispatch abort
+   emit_jump("_dispatch_abort", str);
+
+   // If the expression was not void continue with the dispatch
+   emit_label_def(continue_dispatch, str);
    // Get the index into the dispatch table for this method
    Symbol expr_type = dispatch_type == SELF_TYPE ? cgen_node->name : dispatch_type;
    CgenNodeP dispatch_cgen_node = cgen_node->get_symbol_table()->lookup(expr_type);
@@ -727,7 +749,7 @@ void emit_dispatch(ostream &str, Expression expression, Symbol dispatch_type, Sy
 
    // Load the proto obect for the dispatch type into T0 
    emit_partial_load_address(T0, str);
-   emit_protobj_ref(dispatch_type, str);
+   emit_protobj_ref(expr_type, str);
    str << endl;
 
    // Load the address of the dispatch table into T0
@@ -750,7 +772,7 @@ void emit_dispatch(ostream &str, Expression expression, Symbol dispatch_type, Sy
       emit_store(ACC, 0, SP, str);
 
       // bump the stack pointer
-      emit_stack_size_push(1, str); // parameter n is at 
+      emit_stack_size_push(1, str); 
    }
 
    // Jal to the method definition
@@ -856,7 +878,7 @@ void typcase_class::code(ostream &s, CgenNodeP cgen_node) {
 
    // Load word size into T2
    emit_load_imm(T2, WORD_SIZE, s);
-   // Multiply T1 by the number of bytes which is stored in T2 to get the offset from the CALLTAGTABLE label
+   // Multiply T1 by the number of bytes which is stored in T2 to get the offset from the class_tagTab label
    emit_mul(T1, T1, T2, s);
 
    //The correct class tag table offset is now stored in T1, now we need to use the class tag table to access the inheritance table for this class
@@ -999,7 +1021,7 @@ void let_class::code(ostream &s, CgenNodeP cgen_node) {
    emit_stack_size_pop(1, s);
 }
 
-static void emit_binary_op_prefix(Expression lhs, Expression rhs, ostream &s, CgenNodeP cgen_node)
+void emit_binary_op_prefix(Expression lhs, Expression rhs, ostream &s, CgenNodeP cgen_node)
 {
   // This function assumes that Int objects will be present in register ACC after evaluating both lhs and rhs expressions
 
@@ -1024,7 +1046,7 @@ static void emit_binary_op_prefix(Expression lhs, Expression rhs, ostream &s, Cg
   //T1 now stores the lhs int operand and T2 now stores the rhs int operand-
 }
 
-static void emit_object_allocation(Symbol return_type, ostream &s)
+void emit_object_allocation(Symbol return_type, ostream &s)
 {
   /* Create a new return object on the heap, populate its data field with the value in ACC, and populate ACC with a pointer to that object
       Note: Expects the raw result of the operand to be in register T2 */
@@ -1046,7 +1068,7 @@ static void emit_object_allocation(Symbol return_type, ostream &s)
 // todo: Why do the results of expressions get allocated on the heap? How does that make any sense?
 // Why couldn't we allocate the result of expressions on the stack?
 
-static void emit_binary_op_suffix(Symbol return_type, ostream &s)
+void emit_binary_op_suffix(Symbol return_type, ostream &s)
 {
   // For bools we don't need to allocate a new object
   if (return_type == Int) emit_object_allocation(return_type, s);
@@ -1214,23 +1236,63 @@ void bool_const_class::code(ostream& s, CgenNodeP cgen_node)
   emit_load_bool(ACC, BoolConst(val), s);
 }
 
+//todo: Test SELF_TYPE!!!!
 void new__class::code(ostream &s, CgenNodeP cgen_node)
 {
-   Symbol class_to_create = type_name == SELF_TYPE ? cgen_node->name : type_name; 
+   if (type_name == SELF_TYPE)
+   {
+      // First load the class tag for the SELF object into T1
+      emit_load(T1, 0, SELF, s);
+      // Then subtract 3 because the class tag table starts with class tag == 3
+      emit_addiu(T1, T1, -3, s);
 
-   // Load the correct proto-object into ACC
-   emit_partial_load_address(ACC, s);
-   emit_protobj_ref(class_to_create, s);
-   s << endl;
+      // Load word size * 2 into T2 since the proto-object labels are stored every 2 words / 8 bytes
+      emit_load_imm(T2, WORD_SIZE * 2, s);
+      // Multiply T1 by the number of bytes which is stored in T2 to get the offset from the class_objTab label
+      emit_mul(T1, T1, T2, s);
+
+      //The correct class tag table offset is now stored in T1, now we need to use the class_objTab to access the proto-obj for this class
+      emit_load_address(T2, "class_objTab", s);
+      //T1 now stores the location in memory of a word that stores the address to the proto-object
+      emit_add(T1, T2, T1, s);
+
+      //ACC now stores the address of the correct self proto-object
+      emit_load(ACC, 0, T1, s);
+
+      // Add one word to T1 to get the address of the init method
+      emit_addiu(T1, T1, WORD_SIZE, s);
+      
+      // Push the value onto the stack for later retrieval
+      emit_store(T1, 0, SP, s);
+      emit_stack_size_push(1, s);
+   }
+   else
+   {
+      // Load the correct proto-object into ACC
+      emit_partial_load_address(ACC, s);
+      emit_protobj_ref(type_name, s);
+      s << endl;
+   }
 
    // Copy the proto-object to the heap
-   // todo: don't really like this since if the method name changed this would break
    emit_jal("Object.copy", s);
 
-   // Invoke initialization method on the object that we just allocated
-   std::stringstream init_method_ref;
-   emit_init_ref(class_to_create, init_method_ref);
-   emit_jal(init_method_ref.str().c_str(), s);
+   if (type_name == SELF_TYPE)
+   {
+      // load the address of the init method from the stack
+      emit_load(T1, 1, SP, s);
+      emit_stack_size_pop(1, s);
+
+      // jump to init method
+      emit_jalr(T1, s);
+   }
+   else
+   {
+      // Invoke initialization method on the object that we just allocated
+      std::stringstream init_method_ref;
+      emit_init_ref(type_name, init_method_ref);
+      emit_jal(init_method_ref.str().c_str(), s);
+   }
 }
 
 void isvoid_class::code(ostream &s, CgenNodeP cgen_node)

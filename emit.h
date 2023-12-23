@@ -153,6 +153,7 @@ void emit_label_ref(int l, ostream &s);
 void emit_protobj_ref(Symbol sym, ostream& s);
 void emit_method_ref(Symbol classname, Symbol methodname, ostream& s);
 void emit_label_def(int l, ostream &s);
+void emit_jump(char *label, ostream &s);
 void emit_jump(int label, ostream &s);
 void emit_beqz(char *source, int label, ostream &s);
 void emit_beq(char *src1, char *src2, int label, ostream &s);

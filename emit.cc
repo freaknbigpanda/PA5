@@ -150,6 +150,11 @@ void emit_label_def(int l, ostream &s)
   s << ":" << endl;
 }
 
+void emit_jump(char *label, ostream &s)
+{
+  s << JUMP << label << endl;
+}
+
 void emit_jump(int label, ostream &s)
 {
   s << JUMP;

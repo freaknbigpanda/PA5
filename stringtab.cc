@@ -24,7 +24,7 @@ Entry::Entry(char *s, int l, int i) : len(l), index(i) {
   str[len] = '\0';
 }
 
-int Entry::equal_string(char *string, int length) const
+int Entry::equal_string(const char *string, int length) const
 {
   return (len == length) && (strncmp(str,string,len) == 0);
 }

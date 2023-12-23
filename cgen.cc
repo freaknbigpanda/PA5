@@ -405,8 +405,6 @@ void CgenClassTable::code_prototype_objects()
 {
   for(auto it = cgen_nodes_for_tag.cbegin(); it != cgen_nodes_for_tag.cend(); ++it)
   {
-    if ((*it).second->name == Bool) continue; // No need for bool protoobject since we already have the true and false consts
-
     // Apparently for garbage collection, need -1 in object address -4 (see cool-runtime.pdf)
     str << WORD << "-1" << endl;
 
@@ -463,10 +461,9 @@ void CgenClassTable::code_class_names()
 void CgenClassTable::code_obj_table()
 {
   str << CLASSOBJTAB << ":" << endl;
+
   for(auto it = cgen_nodes_for_tag.cbegin(); it != cgen_nodes_for_tag.cend(); ++it)
   {
-    if ((*it).second->name == Bool) continue; // No bool proto object exists since we already have the true and false consts
-
     str << WORD;
     CgenNode* current_node_ptr = (*it).second;
     emit_protobj_ref(current_node_ptr->name, str);
@@ -545,6 +542,7 @@ void CgenClassTable::code_object_initializers()
     emit_method_prefix(str);
 
     // Save the value of self into register S0
+    // note that init is *always* called after Object.copy which leaves a copy of the proto-object in ACC
     emit_move(SELF, ACC, str);
     
 
@@ -623,7 +621,7 @@ void CgenClassTable::code_object_methods()
 
       // Save the value of self, which is stored in ACC on method entry, into register S0
       emit_move(SELF, ACC, str);
-
+      
       // Add bindings for all of the formal identifiers
       for(int i = method->formals->first(); method->formals->more(i); i = method->formals->next(i))
       {
