@@ -1275,6 +1275,9 @@ void new__class::code(ostream &s, CgenNodeP cgen_node)
 
       // Add one word to T1 to get the address of the init method
       emit_addiu(T1, T1, WORD_SIZE, s);
+
+      // Load the address of the init method pointed to by T1 into T1
+      emit_load(T1, 0, T1, s);
       
       // Push the value onto the stack for later retrieval
       emit_store(T1, 0, SP, s);
