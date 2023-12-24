@@ -26,16 +26,15 @@ typedef CgenClassTable *CgenClassTableP;
 class CgenNode;
 typedef CgenNode *CgenNodeP;
 using CgenNodeMap = std::map<int, CgenNodeP>;
+using ClassNameToTagMap = std::map<Symbol, int>;
 
 class CgenClassTable : public SymbolTable<Symbol,CgenNode> {
 private:
    List<CgenNode> *code_gen_classes;
    ostream& str;
-   int stringclasstag;
-   int intclasstag;
-   int boolclasstag;
-   int nonbasicclasstag;
+   int lastclasstag;
    CgenNodeMap cgen_nodes_for_tag;
+   ClassNameToTagMap class_tag_for_name;
 
 // The following methods emit code for
 // constants and global declarations.
@@ -68,7 +67,7 @@ public:
    CgenClassTable(Classes, ostream& str);
    void code();
    int get_next_class_tag(Symbol class_name);
-   CgenNodeP get_class_with_tag(int tag) const;
+   int get_tag_for_name(Symbol class_name) const;
    CgenNodeMap get_cgen_node_map() const { return cgen_nodes_for_tag; }
    CgenNodeP root();
 };

@@ -887,8 +887,6 @@ void typcase_class::code(ostream &s, CgenNodeP cgen_node) {
 
    // First get the class tag for the case expression class
    emit_load(T1, 0, ACC, s);
-   // Then subtract 3 because the class tag table starts with class tag == 3
-   emit_addiu(T1, T1, -3, s);
 
    // Load word size into T2
    emit_load_imm(T2, WORD_SIZE, s);
@@ -1250,15 +1248,12 @@ void bool_const_class::code(ostream& s, CgenNodeP cgen_node)
   emit_load_bool(ACC, BoolConst(val), s);
 }
 
-//todo: Test SELF_TYPE!!!!
 void new__class::code(ostream &s, CgenNodeP cgen_node)
 {
    if (type_name == SELF_TYPE)
    {
       // First load the class tag for the SELF object into T1
       emit_load(T1, 0, SELF, s);
-      // Then subtract 3 because the class tag table starts with class tag == 3
-      emit_addiu(T1, T1, -3, s);
 
       // Load word size * 2 into T2 since the proto-object labels are stored every 2 words / 8 bytes
       emit_load_imm(T2, WORD_SIZE * 2, s);
@@ -1266,7 +1261,7 @@ void new__class::code(ostream &s, CgenNodeP cgen_node)
       emit_mul(T1, T1, T2, s);
 
       //The correct class tag table offset is now stored in T1, now we need to use the class_objTab to access the proto-obj for this class
-      emit_load_address(T2, "class_objTab", s);
+      emit_load_address(T2, CLASSOBJTAB, s);
       //T1 now stores the location in memory of a word that stores the address to the proto-object
       emit_add(T1, T2, T1, s);
 

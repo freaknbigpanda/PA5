@@ -299,11 +299,11 @@ void CgenClassTable::code_global_data()
   // during code generation.
   //
   str << INTTAG << LABEL
-      << WORD << intclasstag << endl;
+      << WORD << get_tag_for_name(Int) << endl;
   str << BOOLTAG << LABEL
-      << WORD << boolclasstag << endl;
+      << WORD << get_tag_for_name(Bool) << endl;
   str << STRINGTAG << LABEL
-      << WORD << stringclasstag << endl;
+      << WORD << get_tag_for_name(Str) << endl;
 }
 
 
@@ -377,26 +377,20 @@ void CgenClassTable::code_constants()
   stringtable.add_string("");
   inttable.add_string("0");
 
-  stringtable.code_string_table(str,stringclasstag);
-  inttable.code_string_table(str,intclasstag);
-  code_bools(boolclasstag);
+  stringtable.code_string_table(str,get_tag_for_name(Str));
+  inttable.code_string_table(str,get_tag_for_name(Int));
+  code_bools(get_tag_for_name(Bool));
 }
 
 
 
 CgenClassTable::CgenClassTable(Classes classes, ostream& s) : code_gen_classes(NULL) , str(s)
 {
-  stringclasstag = 5 /* Change to your String class tag here */;
-  intclasstag =    3 /* Change to your Int class tag here */;
-  boolclasstag =   4 /* Change to your Bool class tag here */;
-  nonbasicclasstag = 6;
-
   enterscope();
   if (cgen_debug) cout << "Building CgenClassTable" << endl;
   install_basic_classes();
   install_classes(classes);
   build_inheritance_tree();
-
   code();
   exitscope();
 }
@@ -621,7 +615,7 @@ void CgenClassTable::code_object_methods()
 
       // Save the value of self, which is stored in ACC on method entry, into register S0
       emit_move(SELF, ACC, str);
-      
+
       // Add bindings for all of the formal identifiers
       for(int i = method->formals->first(); method->formals->more(i); i = method->formals->next(i))
       {
@@ -770,10 +764,10 @@ void CgenClassTable::install_class(CgenNodeP nd)
   Symbol name = nd->name;
 
   if (probe(name))
-    {
-      abort();
-      return; // todo: not sure when this would get hit
-    }
+  {
+    abort();
+    return; // todo: not sure when this would get hit
+  }
 
   // The class name is legal, so add it to the list of classes
   // and the symbol table.
@@ -782,6 +776,9 @@ void CgenClassTable::install_class(CgenNodeP nd)
 
   // Add to the class tag to cgennode map
   cgen_nodes_for_tag[nd->get_tag()] = nd;
+
+  // Add the class name to the tag map
+  class_tag_for_name[nd->get_name()] = nd->get_tag();
 }
 
 void CgenClassTable::install_classes(Classes cs)
@@ -932,13 +929,20 @@ void CgenClassTable::code()
 
 int CgenClassTable::get_next_class_tag(Symbol class_name)
 {
-  if (class_name == Bool) return boolclasstag;
-  else if (class_name == Int) return intclasstag;
-  else if (class_name == Str) return stringclasstag;
-  else if (class_name == prim_slot) return 0;
-  else if (class_name == No_class) return 1;
-  else if (class_name == SELF_TYPE) return 2;
-  else return nonbasicclasstag++;
+  return lastclasstag++;
+}
+
+int CgenClassTable::get_tag_for_name(Symbol class_name) const
+{
+  if (class_tag_for_name.find(class_name) != class_tag_for_name.end())
+  {
+    return class_tag_for_name.find(class_name)->second;
+  }
+  else
+  {
+    abort();
+    return -1;
+  }
 }
 
 CgenNodeP CgenClassTable::root()
@@ -954,14 +958,19 @@ CgenNodeP CgenClassTable::root()
 ///////////////////////////////////////////////////////////////////////
 
 CgenNode::CgenNode(Class_ nd, Basicness bstatus, CgenClassTableP ct) :
-   class__class((const class__class &) *nd),
-   parentnd(NULL),
-   children(NULL),
-   basic_status(bstatus),
-   symbol_table(ct)
+  class__class((const class__class &) *nd),
+  parentnd(NULL),
+  children(NULL),
+  basic_status(bstatus),
+  symbol_table(ct)
 {
-   string_entry = stringtable.add_string(name->get_string()); // Add class name to string table
-   tag = ct->get_next_class_tag(nd->get_name());
-
-   // Note that we do not initialize the size variable here because we don't know the size of the proto-object until we build the inheritance graph
+  string_entry = stringtable.add_string(name->get_string()); // Add class name to string table
+  Symbol class_name = nd->get_name();
+  if (class_name != prim_slot && class_name != No_class && class_name != SELF_TYPE)
+  {
+    // Note that the three classes above are not assigned a class tag because they play no role in generated assembly and thus don't need a class tag
+    tag = ct->get_next_class_tag(nd->get_name());
+  }
+   
+  // Note that we do not initialize the size variable here because we don't know the size of the proto-object until we build the inheritance graph
 }
