@@ -31,8 +31,7 @@
 
 extern void emit_string_constant(ostream& str, char *s);
 extern int cgen_debug;
-extern std::map<Symbol, int> dynamic_bindings;
-extern int current_stack_size;
+extern std::map<Symbol, int> method_parameters;
 
 //
 // Three symbols from the semantic analyzer (semant.cc) are used.
@@ -533,7 +532,9 @@ void CgenClassTable::code_object_initializers()
     emit_init_ref(current_node_ptr->name, str);
     str << ":" << endl;
 
-    emit_method_prefix(str);
+    emit_method_prefix(str, 0);
+
+    // todo: the cool runtime pdf mentions that ACC is saved for init methods.. not sure if I am doing that properly here or not
 
     // Save the value of self into register S0
     // note that init is *always* called after Object.copy which leaves a copy of the proto-object in ACC
@@ -568,17 +569,15 @@ void CgenClassTable::code_object_initializers()
         emit_protobj_ref(attr_type, str);
         str << endl;
       }
-      else if (dynamic_cast<no_expr_class*>(init_expr) != nullptr && attr_type == Bool)
-      {
-        // If the type is a bool there is no Bool_protObj so just load a ref to boolconst_false into ACC
-        emit_load_bool(ACC, BoolConst(0), str);
-      }
       else
       {
         // Emit code for attribute initialization
         // Note: this will copy zero into ACC for no_expr_class
         attribute->init->code(str, current_node_ptr);
       }
+
+      // todo: This object copy might not be needed in all situations
+      emit_jal("Object.copy", str);
 
       // Store the result of the attribute initialization in the correct location in the heap
       emit_store(ACC, attribute_index + 3, SELF, str);
@@ -610,24 +609,26 @@ void CgenClassTable::code_object_methods()
       method_class* method = (*it).first;
       emit_method_ref(current_node_ptr->name, method->name, str);
       str << ":" << endl;
-
-      int stack_size_push = emit_method_prefix(str);
+      
+      Formals parameters = method->formals;
+      emit_method_prefix(str, parameters->len());
 
       // Save the value of self, which is stored in ACC on method entry, into register S0
       emit_move(SELF, ACC, str);
 
-      // Add bindings for all of the formal identifiers
+      // Add formal FP offset for all of the formal identifiers (aka method parameters)
       for(int i = method->formals->first(); method->formals->more(i); i = method->formals->next(i))
       {
-        // All of the formals will have already been pushed onto the stack by the dispatch call so we just need to set up the proper stack offset here
-        dynamic_bindings[method->formals->nth(i)->get_name()] = current_stack_size - stack_size_push - (method->formals->len() - i);
+        // All of the formals will have already been pushed onto the stack by the dispatch call so we just need to set up the offset for the frame pointer here
+        method_parameters[method->formals->nth(i)->get_name()] = i;
       }
 
       // emit code for the method body
       method->expr->code(str, current_node_ptr);
 
-      Formals parameters = method->formals;
       emit_method_suffix(str, parameters->len());
+
+      // Erase all 
     }
   }
 }
@@ -883,9 +884,8 @@ void CgenNode::set_size_attributes_methods()
 int CgenNode::get_attribute_location(Symbol attribute_name)
 {
   AttrOwnerPair attribute = attribute_name_map[attribute_name];
-  assert(attribute.first != nullptr);
-
-  return std::find(attributes.cbegin(), attributes.cend(), attribute) - attributes.cbegin();
+  if (attribute.first == nullptr) return -1;
+  else return std::find(attributes.cbegin(), attributes.cend(), attribute) - attributes.cbegin();
 }
 
 void CgenClassTable::code()

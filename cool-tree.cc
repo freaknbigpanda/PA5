@@ -47,9 +47,12 @@ int label_index  = 0;
 // This value is increased whenever we emit code to push a value onto the stack 
 // and decreased whenever we emit code to pop a value from the stack
 int current_stack_size = 0;
-// To get the correct stack offset for a particular let binding do the following:
-// stack_size - dynamic_bindings[let symbol]
-std::map<Symbol, int> dynamic_bindings;
+
+// Map of symbols names to the frame pointer offset needed to locate the variable on the stack
+std::map<Symbol, int> local_variables;
+
+// Map of method parameters to the frame pointer offset needed to located the paramater on the stack
+std::map<Symbol, int> method_parameters;
 
 // constructors' functions
 Program program_class::copy_Program()
@@ -708,8 +711,23 @@ Expression object(Symbol name)
 
 void assign_class::code(ostream &s, CgenNodeP cgen_node) {
    expr->code(s, cgen_node);
-   int attribute_location = cgen_node->get_attribute_location(name);
-   emit_store(ACC, 3 + attribute_location, SELF, s);
+   if (local_variables.find(name) != local_variables.end())
+   {
+      emit_store(ACC, current_stack_size - local_variables[name], SP, s);
+   }
+   else if (method_parameters.find(name) != method_parameters.end())
+   {
+      emit_store(ACC, method_parameters[name], FP, s);
+   }
+   else if (int attribute_location = cgen_node->get_attribute_location(name) != -1)
+   {
+      //assign to attribute
+      emit_store(ACC, 3 + attribute_location, SELF, s);
+   }
+   else
+   {
+      abort(); // Should always be able to find the symbol to assign to
+   }
 }
 
 // Loads filename into a0 and linenumber into t1 for abort messages
@@ -726,12 +744,24 @@ void emit_load_filename_and_line_number(ostream &s, Expression  expr, CgenNodeP 
    emit_load_imm(T1, expr->get_line_number(), s);
 }
 
-// Goal: 
-// The SELF register SO should always point to the object that contains the attribute defiintions for the method we are currently executing
-// This means that SELF should be setup on object init and on dispatch
-
 void emit_dispatch(ostream &str, Expression expression, Symbol dispatch_type, Symbol method_name, Expressions parameters, CgenNodeP cgen_node)
 {
+   // Push all of the parameters onto the stack
+   for(int i = parameters->first(); parameters->more(i); i = parameters->next(i))
+   {
+      // Emit code for parameter expression
+      parameters->nth(i)->code(str, cgen_node);
+
+      // Copy the parameter to a new location on the heap as specified by cool operational semantics
+      // todo: it may be possible to optimize this out in certain situations
+      emit_jal("Object.copy", str);
+
+      emit_store(ACC, 0, SP, str);
+
+      // bump the stack pointer
+      emit_stack_size_push(1, str); 
+   }
+
    // Emit the code for the self object we are dispatching to
    expression->code(str, cgen_node);
 
@@ -766,20 +796,6 @@ void emit_dispatch(ostream &str, Expression expression, Symbol dispatch_type, Sy
 
    // Method address is now loaded into T0
    emit_load(T0, 0, T0, str);
-
-   // Push all of the parameters onto the stack
-   for(int i = parameters->first(); parameters->more(i); i = parameters->next(i))
-   {
-      // Emit code for parameter expression
-      parameters->nth(i)->code(str, cgen_node);
-
-      // Push the paramater object onto the stack
-      // todo: for the let and case statements I was calling object copy here but I think this is actually only needed if we are loading a proto-object into acc
-      emit_store(ACC, 0, SP, str);
-
-      // bump the stack pointer
-      emit_stack_size_push(1, str); 
-   }
 
    // Jal to the method definition
    emit_jalr(T0, str);
@@ -963,13 +979,15 @@ void typcase_class::code(ostream &s, CgenNodeP cgen_node) {
 
       // Now copy this object from the expression from acc a new location on the heap
       // todo: I do not think this copy is needed, check this later
+      // The operational schemantics for these operations will specify if I need to do these copies or not
+      // I really don't think I need it for binary operations.
       emit_jal("Object.copy", s);
 
       // Push the result of the copy onto the stack
       emit_store(ACC, 0, SP, s);
 
       // Keep track of the case binding
-      dynamic_bindings[caseBranch->name] = current_stack_size;
+      local_variables[caseBranch->name] = current_stack_size;
 
       // bump the stack pointer
       emit_stack_size_push(1, s);
@@ -1021,7 +1039,7 @@ void let_class::code(ostream &s, CgenNodeP cgen_node) {
    emit_store(ACC, 0, SP, s);
 
    // Keep track of the let binding
-   dynamic_bindings[identifier] = current_stack_size;
+   local_variables[identifier] = current_stack_size;
 
    // bump the stack pointer
    emit_stack_size_push(1, s);
@@ -1337,15 +1355,20 @@ void object_class::code(ostream &s, CgenNodeP cgen_node)
       emit_move(ACC, SELF, s);
    } 
    // check to see if there are any let, case, or parameters with the given name
-   else if (dynamic_bindings.find(name) != dynamic_bindings.end()) 
+   else if (local_variables.find(name) != local_variables.end()) 
    {
       // if there are load the address into acc and return that
-      emit_load(ACC, current_stack_size - dynamic_bindings[name], SP, s);
+      emit_load(ACC, current_stack_size - local_variables[name], SP, s);
+   }
+   else if (method_parameters.find(name) != method_parameters.end())
+   {
+      emit_load(ACC, method_parameters[name] * -1, FP, s);
    }
    else
    {
       // else look for a matching attribute in the class
       int attribute_location = cgen_node->get_attribute_location(name);
+      assert(attribute_location != -1);
       emit_load(ACC, 3 + attribute_location, SELF, s);
    }
 }

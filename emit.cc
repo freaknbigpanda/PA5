@@ -264,22 +264,19 @@ void emit_gc_check(char *source, ostream &s)
   s << JAL << "_gc_check" << endl;
 }
 
-int emit_method_prefix(ostream &str) 
+void emit_method_prefix(ostream &str, int parameter_count) 
 {
-   const int stack_size_push = 3;
-   // Grow the stack 12 bytes for 3 words worth of shit
-   emit_stack_size_push(stack_size_push, str);
-   // Preserve all of the registers we have to for a function call
-   // Todo: the runtime system pdf mentions that s0-s7 are "The standard callee-saved registers on the MIPS architecture" so not sure if I need to save them all here or not
-   // I should only need to save these registers if I use them
-   emit_store(FP, 3, SP, str);
-   emit_store(SELF, 2, SP, str);
-   emit_store(RA, 1, SP, str);
+  // Grow the stack 12 bytes for 3 words worth of shit
+  emit_stack_size_push(3, str); // SP = -3
+  // Preserve all of the registers we have to for a function call
+  // Todo: the runtime system pdf mentions that s0-s7 are "The standard callee-saved registers on the MIPS architecture" so not sure if I need to save them all here or not
+  // I should only need to save these registers if I use them
+  emit_store(FP, 3, SP, str); // Store at SP = 0
+  emit_store(SELF, 2, SP, str); // Store at SP = -1
+  emit_store(RA, 1, SP, str); // Store at SP = -2
 
-   // the stack pointer now points to unused stack memory, set the FP to be 1 word before
-   emit_addiu(FP, SP, 4, str);
-
-   return stack_size_push;
+  // todo: test this to make sure it is actually true
+  emit_addiu(FP, SP, 12 + (WORD_SIZE * parameter_count), str); // FP now points to the first parameter
 }
 
 void emit_method_suffix(ostream &str, int parameter_count)
