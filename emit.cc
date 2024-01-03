@@ -2,8 +2,6 @@
 #include "cgen.h"
 #include "cgen_gc.h"
 
-extern int current_stack_size;
-
 //////////////////////////////////////////////////////////////////////////////
 //
 //  emit_* procedures
@@ -84,17 +82,11 @@ void emit_addu(const char *dest, const char *src1, const char *src2, ostream& s)
 void emit_addiu(const char *dest, const char *src1, int imm, ostream& s)
 { s << ADDIU << dest << " " << src1 << " " << imm << endl; }
 
-void emit_stack_size_push(int num_words, ostream& s)
-{ 
-  emit_addiu(SP, SP, -1 * num_words * WORD_SIZE, s);
-  current_stack_size++;
-}
+void emit_stack_size_push(int num_words, int& sp, ostream& s)
+{ emit_addiu(SP, SP, -1 * num_words * WORD_SIZE, s); sp -= num_words; }
 
-void emit_stack_size_pop(int num_words, ostream& s)
-{ 
-  emit_addiu(SP, SP, num_words * WORD_SIZE, s);
-  current_stack_size--; 
-}
+void emit_stack_size_pop(int num_words, int& sp, ostream& s)
+{ emit_addiu(SP, SP, num_words * WORD_SIZE, s); sp += num_words; }
 
 void emit_div(const char *dest, const char *src1, const char *src2, ostream& s)
 { s << DIV << dest << " " << src1 << " " << src2 << endl; }
@@ -264,10 +256,10 @@ void emit_gc_check(char *source, ostream &s)
   s << JAL << "_gc_check" << endl;
 }
 
-void emit_method_prefix(ostream &str, int parameter_count) 
+void emit_method_prefix(ostream &str, int parameter_count, int& sp) 
 {
   // Grow the stack 12 bytes for 3 words worth of shit
-  emit_stack_size_push(3, str); // SP = -3
+  emit_stack_size_push(3, sp, str); // SP = -3
   // Preserve all of the registers we have to for a function call
   // Todo: the runtime system pdf mentions that s0-s7 are "The standard callee-saved registers on the MIPS architecture" so not sure if I need to save them all here or not
   // I should only need to save these registers if I use them
@@ -275,16 +267,15 @@ void emit_method_prefix(ostream &str, int parameter_count)
   emit_store(SELF, 2, SP, str); // Store at SP = -1
   emit_store(RA, 1, SP, str); // Store at SP = -2
 
-  // todo: test this to make sure it is actually true
   emit_addiu(FP, SP, 12 + (WORD_SIZE * parameter_count), str); // FP now points to the first parameter
 }
 
-void emit_method_suffix(ostream &str, int parameter_count)
+void emit_method_suffix(ostream &str, int parameter_count, int& sp)
 {
    emit_load(FP, 3, SP, str);
    emit_load(SELF, 2, SP, str);
    emit_load(RA, 1, SP, str);
-   emit_stack_size_pop(3 + parameter_count, str);
+   emit_stack_size_pop(3 + parameter_count, sp, str);
 
    emit_return(str);
 }

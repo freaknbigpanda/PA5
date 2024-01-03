@@ -134,8 +134,8 @@ void emit_and(const char *dest, const char *src1, const char *src2, ostream& s);
 void emit_ori(const char *dest, const char *src1, int imm, ostream& s);
 void emit_addu(const char *dest, const char *src1, const char *src2, ostream& s);
 void emit_addiu(const char *dest, const char *src1, int imm, ostream& s);
-void emit_stack_size_pop(int num_words, ostream &s);
-void emit_stack_size_push(int num_words, ostream &s);
+void emit_stack_size_pop(int num_words, int& sp, ostream &s);
+void emit_stack_size_push(int num_words, int& sp, ostream &s);
 void emit_div(const char *dest, const char *src1, const char *src2, ostream &s);
 void emit_mul(const char *dest, const char *src1, const char *src2, ostream& s);
 void emit_sub(const char *dest, const char *src1, const char *src2, ostream& s);
@@ -170,5 +170,5 @@ void emit_store_int(char *source, char *dest, ostream& s);
 void emit_test_collector(ostream &s);
 void emit_gc_check(char *source, ostream &s);
 
-void emit_method_prefix(ostream &str, int parameter_count);
-void emit_method_suffix(ostream &str, int parameter_count);
+void emit_method_prefix(ostream &str, int parameter_count, int &sp);
+void emit_method_suffix(ostream &str, int parameter_count, int &sp);

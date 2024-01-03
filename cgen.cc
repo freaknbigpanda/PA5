@@ -31,7 +31,6 @@
 
 extern void emit_string_constant(ostream& str, char *s);
 extern int cgen_debug;
-extern std::map<Symbol, int> method_parameters;
 
 //
 // Three symbols from the semantic analyzer (semant.cc) are used.
@@ -531,8 +530,9 @@ void CgenClassTable::code_object_initializers()
     CgenNode* current_node_ptr = (*it).second;
     emit_init_ref(current_node_ptr->name, str);
     str << ":" << endl;
-
-    emit_method_prefix(str, 0);
+    
+    int sp = 0;
+    emit_method_prefix(str, 0, sp);
 
     // todo: the cool runtime pdf mentions that ACC is saved for init methods.. not sure if I am doing that properly here or not
 
@@ -573,7 +573,8 @@ void CgenClassTable::code_object_initializers()
       {
         // Emit code for attribute initialization
         // Note: this will copy zero into ACC for no_expr_class
-        attribute->init->code(str, current_node_ptr);
+        SymbolTable<std::string, int> formal_table; // no method parameters for init methods so no need to populate the symbol table here with any offsets
+        attribute->init->code(str, current_node_ptr, formal_table, sp);
       }
 
       // todo: This object copy might not be needed in all situations
@@ -588,7 +589,8 @@ void CgenClassTable::code_object_initializers()
     // Restore the value of self back to register A0 before the method exits
     emit_move(ACC, SELF, str);
 
-    emit_method_suffix(str, 0);
+    emit_method_suffix(str, 0, sp);
+    if (cgen_debug) cout << "sp after coding init method for class " << current_node_ptr->get_name()->get_string() << " is " << sp << endl;
   }
 }
 
@@ -611,24 +613,32 @@ void CgenClassTable::code_object_methods()
       str << ":" << endl;
       
       Formals parameters = method->formals;
-      emit_method_prefix(str, parameters->len());
+      // emit code for the method body
+      int sp = 0; // used to record the position of the stack pointer so we can find local variables
+      emit_method_prefix(str, parameters->len(), sp);
 
       // Save the value of self, which is stored in ACC on method entry, into register S0
       emit_move(SELF, ACC, str);
+
+      // Contains frame pointer offsets for both local variables and parameters
+      SymbolTable<std::string, int> symbol_table;
+      symbol_table.enterscope();
 
       // Add formal FP offset for all of the formal identifiers (aka method parameters)
       for(int i = method->formals->first(); method->formals->more(i); i = method->formals->next(i))
       {
         // All of the formals will have already been pushed onto the stack by the dispatch call so we just need to set up the offset for the frame pointer here
-        method_parameters[method->formals->nth(i)->get_name()] = i;
+        int* fp_offset = new int;
+        *fp_offset = i * -1;
+        symbol_table.addid(method->formals->nth(i)->get_name()->get_string(), fp_offset);
       }
 
-      // emit code for the method body
-      method->expr->code(str, current_node_ptr);
+      method->expr->code(str, current_node_ptr, symbol_table, sp);
 
-      emit_method_suffix(str, parameters->len());
+      emit_method_suffix(str, parameters->len(), sp);
+      if (cgen_debug) cout << "sp after coding method " << method->name->get_string() << " for class " << current_node_ptr->get_name()->get_string() << " is " << sp << endl;
 
-      // Erase all 
+      symbol_table.exitscope();
     }
   }
 }
