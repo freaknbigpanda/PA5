@@ -568,6 +568,8 @@ void CgenClassTable::code_object_initializers()
         emit_partial_load_address(ACC, str);
         emit_protobj_ref(attr_type, str);
         str << endl;
+
+        emit_jal("Object.copy", str);
       }
       else
       {
@@ -576,9 +578,6 @@ void CgenClassTable::code_object_initializers()
         SymbolTable<std::string, int> formal_table; // no method parameters for init methods so no need to populate the symbol table here with any offsets
         attribute->init->code(str, current_node_ptr, formal_table, sp);
       }
-
-      // todo: This object copy might not be needed in all situations
-      emit_jal("Object.copy", str);
 
       // Store the result of the attribute initialization in the correct location in the heap
       emit_store(ACC, attribute_index + 3, SELF, str);
