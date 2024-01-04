@@ -1024,7 +1024,7 @@ void block_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string,
 }
 
 void let_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) {
-   bool isBasic = (type_decl == Int || type_decl == Str);
+   bool isBasic = (type_decl == Int || type_decl == Str || type_decl == Bool);
 
    // If the type is an Int or String and there is no expression, init with default proto-obj, otherwise emit code for the initialization expression
    if (dynamic_cast<no_expr_class*>(init) != nullptr && isBasic)

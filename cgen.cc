@@ -559,7 +559,7 @@ void CgenClassTable::code_object_initializers()
 
       Expression init_expr = attribute->init;
       Symbol attr_type = attribute->type_decl;
-      bool isBasic = (attr_type == Int || attr_type == Str);
+      bool isBasic = (attr_type == Int || attr_type == Str || attr_type == Bool);
 
       // If the type is an Int or String and there is no expression, init with default proto-obj, otherwise emit code for the initialization expression
       if (dynamic_cast<no_expr_class*>(init_expr) != nullptr && isBasic)
