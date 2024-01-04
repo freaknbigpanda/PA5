@@ -906,8 +906,15 @@ void CgenNode::set_size_attributes_methods()
 int CgenNode::get_attribute_location(Symbol attribute_name)
 {
   AttrOwnerPair attribute = attribute_name_map[attribute_name];
-  if (attribute.first == nullptr) return -1;
-  else return std::find(attributes.cbegin(), attributes.cend(), attribute) - attributes.cbegin();
+  if (attribute.first == nullptr) 
+  {
+    return -1;
+  }
+  else 
+  {
+    int index = std::find(attributes.cbegin(), attributes.cend(), attribute) - attributes.cbegin();
+    return index;
+  }
 }
 
 void CgenClassTable::code()

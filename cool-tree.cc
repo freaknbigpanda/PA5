@@ -704,11 +704,12 @@ Expression object(Symbol name)
 void assign_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) {
    expr->code(s, cgen_node, formals_table, sp);
    int* fp_offset = formals_table.lookup(name->get_string());
+   int attribute_location = cgen_node->get_attribute_location(name);
    if (fp_offset != nullptr)
    {
       emit_store(ACC, *fp_offset, FP, s);
    }
-   else if (int attribute_location = cgen_node->get_attribute_location(name) != -1)
+   else if (attribute_location != -1)
    {
       //assign to attribute
       emit_store(ACC, 3 + attribute_location, SELF, s);
