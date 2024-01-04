@@ -868,11 +868,22 @@ void CgenNode::set_size_attributes_methods()
         
         method_class* method = static_cast<method_class*>(feature);
         MethodOwnerPair method_owner_pair = { method, current_parent->name };
-        // If the method was defined in a baseclass we don't to replace the method definition with the super class one
+
+        //If the method was defined in a baseclass we don't to replace the method definition with the super class one
         if (method_name_map.find(method->name) == method_name_map.end())
         {
           new_methods.push_back(method_owner_pair);
         } 
+        else
+        {
+          // this means we have found a super class definition that is overriden in a base class
+          // So we need to remove the old entry from methods and then add it back at a new location
+          // This is because the dispatch table needs to be have the same offset for derived and base methods
+          auto it = std::find(methods.begin(), methods.end(), method_name_map[method->name]);
+          assert(it != methods.end());
+          methods.erase(it);
+          new_methods.push_back(method_name_map[method->name]);
+        }
 
         method_name_map[method->name] = method_owner_pair;
       }

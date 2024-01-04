@@ -733,7 +733,8 @@ void emit_load_filename_and_line_number(ostream &s, Expression  expr, CgenNodeP 
    emit_load_imm(T1, expr->get_line_number(), s);
 }
 
-void emit_dispatch(ostream &s, Expression expression, Symbol dispatch_type, Symbol method_name, Expressions parameters, CgenNodeP cgen_node, SymbolTable<std::string, int> formals_table, int& sp)
+void emit_dispatch(ostream &s, Expression expression, Symbol dispatch_type, Symbol method_name, Expressions parameters, CgenNodeP cgen_node, 
+SymbolTable<std::string, int> formals_table, int& sp, bool is_dynamic)
 {
    // Push all of the parameters onto the stack
    for(int i = parameters->first(); parameters->more(i); i = parameters->next(i))
@@ -772,10 +773,18 @@ void emit_dispatch(ostream &s, Expression expression, Symbol dispatch_type, Symb
    int method_index = dispatch_cgen_node->get_method_location(method_name);
    assert(method_index != -1);
 
-   // Load the proto obect for the dispatch type into T0 
-   emit_partial_load_address(T0, s);
-   emit_protobj_ref(expr_type, s);
-   s << endl;
+   if (is_dynamic == false)
+   {
+      // Load the proto obect for the dispatch type into T0 
+      emit_partial_load_address(T0, s);
+      emit_protobj_ref(expr_type, s);
+      s << endl;
+   }
+   else
+   {
+      // Moving the dispatch type into TO 
+      emit_move(T0, ACC, s);
+   }
 
    // Load the address of the dispatch table into T0
    emit_load(T0, 2, T0, s);
@@ -791,11 +800,11 @@ void emit_dispatch(ostream &s, Expression expression, Symbol dispatch_type, Symb
 }
 
 void static_dispatch_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) {
-   emit_dispatch(s, expr, type_name, name, actual, cgen_node, formals_table, sp);
+   emit_dispatch(s, expr, type_name, name, actual, cgen_node, formals_table, sp, false);
 }
 
 void dispatch_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) {
-   emit_dispatch(s, expr, expr->type, name, actual, cgen_node, formals_table, sp);
+   emit_dispatch(s, expr, expr->type, name, actual, cgen_node, formals_table, sp, true);
 }
 
 void cond_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) {
@@ -1015,21 +1024,26 @@ void block_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string,
 }
 
 void let_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) {
-   if (dynamic_cast<no_expr_class*>(init) == nullptr)
+   bool isBasic = (type_decl == Int || type_decl == Str);
+
+   // If the type is an Int or String and there is no expression, init with default proto-obj, otherwise emit code for the initialization expression
+   if (dynamic_cast<no_expr_class*>(init) != nullptr && isBasic)
    {
-      // If we have an init expr then evaluate the rhs
-      init->code(s, cgen_node, formals_table, sp);
-   }
-   else
-   {
-      // If not then load the default proto-obj for this object
+      // If we don't have an expression init the attribute to the value of the appropiate proto obj
+      // Load the proto object address into ACC
+      // Note that for non-basic types we just let them initialize to void
       emit_partial_load_address(ACC, s);
       emit_protobj_ref(type_decl, s);
       s << endl;
-   }
 
-   // Now copy this object into a new location on the heap
-   emit_jal("Object.copy", s);
+      emit_jal("Object.copy", s);
+   }
+   else
+   {
+      // Emit code for let variable initialization
+      // Note: this will copy zero into ACC for no_expr_class
+      init->code(s, cgen_node, formals_table, sp);
+   }
 
    // Push the result of the copy onto the stack
    emit_store(ACC, 0, SP, s);
