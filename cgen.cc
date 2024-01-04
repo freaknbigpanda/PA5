@@ -578,7 +578,7 @@ void CgenClassTable::code_object_initializers()
         // Emit code for attribute initialization
         // Note: this will copy zero into ACC for no_expr_class
         SymbolTable<std::string, int> formal_table; // no method parameters for init methods so no need to populate the symbol table here with any offsets
-        attribute->init->code(str, current_node_ptr, formal_table, sp);
+        attribute->init->code(str, current_node_ptr, formal_table, sp, 0);
       }
 
       // Store the result of the attribute initialization in the correct location in the heap
@@ -634,7 +634,7 @@ void CgenClassTable::code_object_methods()
         symbol_table.addid(method->formals->nth(i)->get_name()->get_string(), fp_offset);
       }
 
-      method->expr->code(str, current_node_ptr, symbol_table, sp);
+      method->expr->code(str, current_node_ptr, symbol_table, sp, parameters->len());
 
       emit_method_suffix(str, parameters->len(), sp);
       if (cgen_debug) cout << "sp after coding method " << method->name->get_string() << " for class " << current_node_ptr->get_name()->get_string() << " is " << sp << endl;

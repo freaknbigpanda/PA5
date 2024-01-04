@@ -100,13 +100,13 @@ void dump_with_types(ostream& ,int);	\
 Symbol type;                                 \
 Symbol get_type() { return type; }           \
 Expression set_type(Symbol s) { type = s; return this; } \
-virtual void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&) = 0; \
+virtual void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int) = 0; \
 virtual void dump_with_types(ostream&,int) = 0;  \
 void dump_type(ostream&, int);               \
 Expression_class() { type = (Symbol) NULL; }	\
 
 #define Expression_SHARED_EXTRAS           \
-void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&); 			   \
+void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int); 			   \
 void dump_with_types(ostream&,int); \
 
 #endif
