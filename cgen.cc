@@ -555,6 +555,8 @@ void CgenClassTable::code_object_initializers()
     {
       attr_class* attribute = (*it).first;
 
+      if ((*it).second != current_node_ptr->name) continue; // we don't need to initialize superclass attributes
+
       Expression init_expr = attribute->init;
       Symbol attr_type = attribute->type_decl;
       bool isBasic = (attr_type == Int || attr_type == Str);
