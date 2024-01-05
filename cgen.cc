@@ -847,12 +847,24 @@ void CgenNode::set_size_attributes_methods()
 {
   size = 3; // base object has a size of at least 3 for the class tag, object size, and dispatch pointer
 
-  CgenNodeP current_parent = this;
+  // First construct the list of classes to traverse
+  std::vector<CgenNodeP> classes;
+  CgenNodeP parent = this;
+  while (parent != nullptr) {
+    classes.push_back(parent);
+    parent = parent->parentnd;
+    
+    // Set the inheritance depth for this CgenNode, this is used later in the case statement code generation
+    inheritance_depth++;
+  }
 
-  while (current_parent != nullptr) {
-    Features features = current_parent->features;
-    std::vector<AttrOwnerPair> new_attributes = std::vector<AttrOwnerPair>();
-    std::vector<MethodOwnerPair> new_methods = std::vector<MethodOwnerPair>();
+  std::map<std::string, MethodOwnerPair> method_names;
+
+  // Now interate the classes in reverse order since we want to list methods and attributes of the super classes first
+  for (auto it = classes.rbegin(); it != classes.rend(); it++ )
+  {
+    CgenNodeP current_class = *it;
+    Features features = current_class->features;
 
     for (int i = features->first(); features->more(i); i = features->next(i))
     {
@@ -861,45 +873,36 @@ void CgenNode::set_size_attributes_methods()
       {
         size++;
         attr_class* attribute = static_cast<attr_class*>(feature);
-        AttrOwnerPair attribute_owner_pair = { attribute, current_parent->name };
-        new_attributes.push_back(attribute_owner_pair);
+        AttrOwnerPair attribute_owner_pair = { attribute, current_class->name };
+        attributes.push_back(attribute_owner_pair);
         attribute_name_map[attribute->name] = attribute_owner_pair;
       }
       else
       {
         
         method_class* method = static_cast<method_class*>(feature);
-        MethodOwnerPair method_owner_pair = { method, current_parent->name };
+        MethodOwnerPair method_owner_pair = { method, current_class->name };
 
         //If the method was defined in a baseclass we don't to replace the method definition with the super class one
-        if (method_name_map.find(method->name) == method_name_map.end())
+        if (method_names.find(method->name->get_string()) == method_names.end())
         {
-          new_methods.push_back(method_owner_pair);
+          methods.push_back(method_owner_pair);
         } 
         else
         {
-          // this means we have found a super class definition that is overriden in a base class
-          // So we need to remove the old entry from methods and then add it back at a new location
-          // This is because the dispatch table needs to be have the same offset for derived and base methods
-          auto it = std::find(methods.begin(), methods.end(), method_name_map[method->name]);
+          // This means we have found a super class definition that is overriden in a base class
+          // In this case we don't want to push back a new method, we just want to replace the current entry in methods
+          // The reason for this is because when doing dispatch codegen we assume that the offset in the dispatch table for a particular 
+          // method name is the same for all subclasses regardless of method overrides
+          auto it = std::find(methods.begin(), methods.end(), method_names[method->name->get_string()]);
           assert(it != methods.end());
           methods.erase(it);
-          new_methods.push_back(method_name_map[method->name]);
+          methods.insert(it, method_owner_pair);
         }
 
-        method_name_map[method->name] = method_owner_pair;
+        method_names[method->name->get_string()] = method_owner_pair;
       }
     }
-
-    // We want the methods and attributes to be ordered starting with Object and then progressing down the inheritance tree so we need to do this shuffling
-    new_attributes.insert(new_attributes.end(), attributes.begin(), attributes.end());
-    attributes = new_attributes;
-
-    new_methods.insert(new_methods.end(), methods.begin(), methods.end());
-    methods = new_methods;
-
-    current_parent = current_parent->parentnd;
-    inheritance_depth++;
   }
 }
 
