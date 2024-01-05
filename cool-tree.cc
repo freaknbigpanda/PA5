@@ -1229,14 +1229,22 @@ void eq_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, in
   // Value returned in ACC if true
   emit_load_bool(ACC, BoolConst(1), s);
 
+  // If pointers are equal we don't need to do the equality test jal 
+  int pointers_are_equal = label_index++; 
+  emit_beq(T2, T1, pointers_are_equal, s);
+
+  // Pointers not equal so continue with equality test
   // Value return in ACC if false
   emit_load_bool(A1, BoolConst(0), s);
 
   // Jump and link to the compare method
   emit_jal("equality_test", s);
 
+  emit_label_def(pointers_are_equal, s);
   // Restore the stack pointer
   emit_stack_size_pop(1, sp, s);
+
+
 }
 
 // Note: this is actually the not operator. No idea why it is called comp
