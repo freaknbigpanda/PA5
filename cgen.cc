@@ -545,12 +545,11 @@ void CgenClassTable::code_object_initializers()
     {
       std::stringstream init_ref;
       emit_init_ref(current_node_ptr->parent, init_ref);
-      emit_jal(init_ref.str().c_str(), str);
+      emit_jal(init_ref.str().c_str(), sp, 0, str);
     }
 
     // Initializing attributes
     std::vector<AttrOwnerPair> attributes = current_node_ptr->get_attributes();
-    int attribute_index = 0;
     for (auto it = attributes.cbegin(); it != attributes.cend(); ++it)
     {
       attr_class* attribute = (*it).first;
@@ -571,7 +570,7 @@ void CgenClassTable::code_object_initializers()
         emit_protobj_ref(attr_type, str);
         str << endl;
 
-        emit_jal("Object.copy", str);
+        emit_object_copy(str);
       }
       else
       {
@@ -582,15 +581,14 @@ void CgenClassTable::code_object_initializers()
       }
 
       // Store the result of the attribute initialization in the correct location in the heap
+      int attribute_index = current_node_ptr->get_attribute_location(attribute->name);
       emit_store(ACC, attribute_index + 3, SELF, str);
-
-      attribute_index++;
     }
 
     // Restore the value of self back to register A0 before the method exits
     emit_move(ACC, SELF, str);
 
-    emit_method_suffix(str, 0, sp);
+    emit_method_suffix(str, 0);
     if (cgen_debug) cout << "sp after coding init method for class " << current_node_ptr->get_name()->get_string() << " is " << sp << endl;
   }
 }
@@ -636,7 +634,7 @@ void CgenClassTable::code_object_methods()
 
       method->expr->code(str, current_node_ptr, symbol_table, sp, parameters->len());
 
-      emit_method_suffix(str, parameters->len(), sp);
+      emit_method_suffix(str, parameters->len());
       if (cgen_debug) cout << "sp after coding method " << method->name->get_string() << " for class " << current_node_ptr->get_name()->get_string() << " is " << sp << endl;
 
       symbol_table.exitscope();

@@ -142,8 +142,9 @@ void emit_sub(const char *dest, const char *src1, const char *src2, ostream& s);
 void emit_sll(const char *dest, const char *src1, int num, ostream& s);
 void emit_slt(const char *cmp_result, const char *lhs, const char *rhs, ostream& s);
 void emit_slti(const char *cmp_result, const char *lhs, int imm, ostream& s);
-void emit_jalr(const char *dest, ostream& s);
-void emit_jal(const char *address,ostream &s);
+void emit_jalr(const char *dest, int& sp, int num_params, ostream& s);
+void emit_jal(const char *address, int& sp, int num_params, ostream &s);
+void emit_object_copy(ostream &s);
 void emit_return(ostream& s);
 void emit_gc_assign(ostream& s);
 void emit_disptable_ref(Symbol sym, ostream& s);
@@ -171,4 +172,5 @@ void emit_test_collector(ostream &s);
 void emit_gc_check(char *source, ostream &s);
 
 void emit_method_prefix(ostream &str, int parameter_count, int &sp);
-void emit_method_suffix(ostream &str, int parameter_count, int &sp);
+void emit_method_suffix(ostream &str, int parameter_count);
+// void emit_method_suffix(ostream &str, int parameter_count, int &sp);

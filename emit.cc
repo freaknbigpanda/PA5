@@ -106,11 +106,23 @@ void emit_slt(const char *cmp_result, const char *lhs, const char *rhs, ostream&
 void emit_slti(const char *cmp_result, const char *lhs, int imm, ostream& s)
 { s << SLTI << cmp_result << " " << lhs << " " << imm << endl; }
 
-void emit_jalr(const char *dest, ostream& s)
-{ s << JALR << "\t" << dest << endl; }
+void emit_jalr(const char *dest, int &sp, int num_params, ostream &s)
+{
+  s << JALR << "\t" << dest << endl;
+  sp += num_params;
+}
 
-void emit_jal(const char *address,ostream &s)
-{ s << JAL << address << endl; }
+void emit_jal(const char *address, int &sp, int num_params, ostream &s)
+{ 
+  s << JAL << address << endl; 
+  sp += num_params;
+}
+
+void emit_object_copy(ostream &s)
+{
+  int does_not_matter;
+  emit_jal("Object.copy", does_not_matter, 0, s);
+}
 
 void emit_return(ostream& s)
 { s << RET << endl; }
@@ -270,12 +282,13 @@ void emit_method_prefix(ostream &str, int parameter_count, int& sp)
   emit_addiu(FP, SP, 12 + (WORD_SIZE * parameter_count), str); // FP now points to the first parameter
 }
 
-void emit_method_suffix(ostream &str, int parameter_count, int& sp)
+void emit_method_suffix(ostream &str, int parameter_count)
 {
    emit_load(FP, 3, SP, str);
    emit_load(SELF, 2, SP, str);
    emit_load(RA, 1, SP, str);
-   emit_stack_size_pop(3 + parameter_count, sp, str);
+   int does_not_matter;
+   emit_stack_size_pop(3 + parameter_count, does_not_matter, str);
 
    emit_return(str);
 }

@@ -745,7 +745,7 @@ SymbolTable<std::string, int> formals_table, int& sp, bool is_dynamic, int num_p
 
       // Copy the parameter to a new location on the heap as specified by cool operational semantics
       // todo: it may be possible to optimize this out in certain situations
-      emit_jal("Object.copy", s);
+      emit_object_copy(s);
 
       emit_store(ACC, 0, SP, s);
 
@@ -797,7 +797,7 @@ SymbolTable<std::string, int> formals_table, int& sp, bool is_dynamic, int num_p
    emit_load(T0, 0, T0, s);
 
    // Jal to the method definition
-   emit_jalr(T0, s);
+   emit_jalr(T0, sp, parameters->len(), s);
 }
 
 void static_dispatch_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp, int num_params) {
@@ -832,7 +832,7 @@ void cond_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, 
    emit_load_imm(A1, 0, s);
 
    // Jump and link to the compare method to test the predicate result
-   emit_jal("equality_test", s);
+   emit_jal("equality_test", sp, 0, s);
 
    // Jump to else if false
    emit_beq(ACC, ZERO, else_label, s);
@@ -871,7 +871,7 @@ void loop_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, 
    emit_load_imm(A1, 0, s);
 
    // Jump and link to the compare method to test the predicate result
-   emit_jal("equality_test", s);
+   emit_jal("equality_test", sp, 0, s);
 
    emit_beq(ACC, ZERO, exit_label, s);
 
@@ -981,7 +981,7 @@ void typcase_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::strin
       // todo: I do not think this copy is needed, check this later
       // The operational schemantics for these operations will specify if I need to do these copies or not
       // I really don't think I need it for binary operations.
-      emit_jal("Object.copy", s);
+      emit_object_copy(s);
 
       // Push the result of the copy onto the stack
       emit_store(ACC, 0, SP, s);
@@ -1038,7 +1038,7 @@ void let_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, i
       emit_protobj_ref(type_decl, s);
       s << endl;
 
-      emit_jal("Object.copy", s);
+      emit_object_copy(s);
    }
    else
    {
@@ -1093,7 +1093,7 @@ void emit_binary_op_prefix(Expression lhs, Expression rhs, ostream &s, CgenNodeP
   //T1 now stores the lhs int operand and T2 now stores the rhs int operand-
 }
 
-void emit_object_allocation(Symbol return_type, ostream &s)
+void emit_object_allocation(Symbol return_type, ostream &s , int& sp)
 {
   /* Create a new return object on the heap, populate its data field with the value in ACC, and populate ACC with a pointer to that object
       Note: Expects the raw result of the operand to be in register T2 */
@@ -1103,10 +1103,8 @@ void emit_object_allocation(Symbol return_type, ostream &s)
   emit_protobj_ref(return_type, s);
   s << endl;
 
-  // Create the object on the heap
-  std::stringstream method_name;
-  emit_method_ref(Object, copy, method_name);
-  emit_jal(method_name.str().c_str(), s);
+  // Copy the object onto the heap
+  emit_object_copy(s);
 
   // Store the result in T2 into the object stored at ACC
   emit_store(T2, 3, ACC, s);
@@ -1118,7 +1116,7 @@ void emit_object_allocation(Symbol return_type, ostream &s)
 void emit_binary_op_suffix(Symbol return_type, ostream &s, int& sp)
 {
   // For bools we don't need to allocate a new object
-  if (return_type == Int) emit_object_allocation(return_type, s);
+  if (return_type == Int) emit_object_allocation(return_type, s, sp);
 
   // return the stack pointer to its previous value
   emit_stack_size_pop(1, sp, s);
@@ -1178,7 +1176,7 @@ void neg_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, i
     emit_mul(T2, ACC, T1, s);
 
     // Create a new Int object on the heap and store the value of T2 in it
-    emit_object_allocation(Int, s);
+    emit_object_allocation(Int, s, sp);
 }
 
 void lt_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp, int num_params)
@@ -1238,7 +1236,7 @@ void eq_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, in
   emit_load_bool(A1, BoolConst(0), s);
 
   // Jump and link to the compare method
-  emit_jal("equality_test", s);
+  emit_jal("equality_test", sp, 0, s);
 
   emit_label_def(pointers_are_equal, s);
   // Restore the stack pointer
@@ -1330,7 +1328,7 @@ void new__class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, 
    }
 
    // Copy the proto-object to the heap
-   emit_jal("Object.copy", s);
+   emit_object_copy(s);
 
    if (type_name == SELF_TYPE)
    {
@@ -1339,14 +1337,14 @@ void new__class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, 
       emit_stack_size_pop(1, sp, s);
 
       // jump to init method
-      emit_jalr(T1, s);
+      emit_jalr(T1, sp, 0, s);
    }
    else
    {
       // Invoke initialization method on the object that we just allocated
       std::stringstream init_method_ref;
       emit_init_ref(type_name, init_method_ref);
-      emit_jal(init_method_ref.str().c_str(), s);
+      emit_jal(init_method_ref.str().c_str(), sp, 0, s);
    }
 }
 

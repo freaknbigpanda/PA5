@@ -41,7 +41,6 @@ int main(int argc, char *argv[]) {
   // 
   // Don't touch the output file until we know that earlier phases of the
   // compiler have succeeded.
-  //
   ast_yyparse();
 
   if (out_filename) {
