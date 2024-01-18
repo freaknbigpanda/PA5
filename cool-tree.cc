@@ -15,6 +15,7 @@
 #include <sstream>
 #include <algorithm>
 #include <set>
+#include "cgen_gc.h"
 
 extern Symbol
          arg,
@@ -713,6 +714,12 @@ void assign_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string
    {
       //assign to attribute
       emit_store(ACC, 3 + attribute_location, SELF, s);
+      
+      if (cgen_Memmgr != GC_NOGC)
+      {
+         emit_addiu(A1, SELF, (3 + attribute_location) * WORD_SIZE, s);
+         emit_jal("_GenGC_Assign", sp, 0, s);
+      }
    }
    else
    {
@@ -745,7 +752,7 @@ SymbolTable<std::string, int> formals_table, int& sp, bool is_dynamic, int num_p
 
       // Copy the parameter to a new location on the heap as specified by cool operational semantics
       // todo: it may be possible to optimize this out in certain situations
-      emit_object_copy(s);
+      //emit_object_copy(s);
 
       emit_store(ACC, 0, SP, s);
 
@@ -809,12 +816,10 @@ void dispatch_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::stri
 }
 
 void cond_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp, int num_params) {
-   int evaluate_pred_label = label_index++;
    int else_label = label_index++;
    int exit_label = label_index++;
 
    // first emit the code to evaluate the predicate
-   emit_label_def(evaluate_pred_label, s);
    pred->code(s, cgen_node, formals_table, sp, num_params);
 
    // after the predicate is evaluated we need to test to see if it is true or false
