@@ -939,7 +939,6 @@ void typcase_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::strin
    int case_finished_label = label_index++;
 
    // Now start evaluating all of the branches from the deepest inheritance to the least deep (progressing towards object)
-   std::set<std::string> case_variable_names;
    for(auto it = case_branches.cbegin(); it != case_branches.cend(); ++it)
    {
       int case_match_found_label = label_index++;
@@ -981,12 +980,6 @@ void typcase_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::strin
       emit_label_def(case_match_found_label, s);
 
       // add the case statement definition to the scope
-
-      // Now copy this object from the expression from acc a new location on the heap
-      // todo: I do not think this copy is needed, check this later
-      // The operational schemantics for these operations will specify if I need to do these copies or not
-      // I really don't think I need it for binary operations.
-      emit_object_copy(s);
 
       // Push the result of the copy onto the stack
       emit_store(ACC, 0, SP, s);

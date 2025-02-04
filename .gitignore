@@ -1,6 +1,8 @@
-cool-lex.cc
+cool-lex.Scc
 *.d
 *.o
+*.out
+*.cl
 .vscode/*
 mycoolc
 *BACKUP*
