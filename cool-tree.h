@@ -8,11 +8,28 @@
 //
 //////////////////////////////////////////////////////////
 
-
 #include "tree.h"
-#include "cool-tree.handcode.h"
+#include "cool.h"
+#include "stringtab.h"
+#include "symtab.h"
 #include <map>
+#include <iostream>
 
+// cool-tree.handcode.h
+#define yylineno curr_lineno;
+extern int yylineno;
+
+inline Boolean copy_Boolean(Boolean b) {return b; }
+inline void assert_Boolean(Boolean) {}
+inline void dump_Boolean(ostream& stream, int padding, Boolean b)
+	{ stream << pad(padding) << (int) b << "\n"; }
+
+void dump_Symbol(ostream& stream, int padding, Symbol b);
+void assert_Symbol(Symbol b);
+Symbol copy_Symbol(Symbol b);
+
+class CgenNode;
+// end of cool-tree.handcode.h
 
 // define the class for phylum
 // define simple phylum - Program
@@ -258,8 +275,8 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
-void dump_with_types(ostream&,int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void dump_with_types(ostream&,int);
 };
 
 
@@ -280,8 +297,8 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
-void dump_with_types(ostream&,int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void dump_with_types(ostream&,int);
 };
 
 
@@ -300,8 +317,8 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
-void dump_with_types(ostream&,int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void dump_with_types(ostream&,int);
 };
 
 
@@ -320,8 +337,8 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
-void dump_with_types(ostream&,int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void dump_with_types(ostream&,int);
 };
 
 
@@ -338,8 +355,8 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
-void dump_with_types(ostream&,int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void dump_with_types(ostream&,int);
 };
 
 
@@ -356,8 +373,8 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
-void dump_with_types(ostream&,int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void dump_with_types(ostream&,int);
 };
 
 
@@ -372,8 +389,8 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
-void dump_with_types(ostream&,int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void dump_with_types(ostream&,int);
 };
 
 
@@ -394,8 +411,8 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
-void dump_with_types(ostream&,int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void dump_with_types(ostream&,int);
 };
 
 
@@ -412,8 +429,8 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
-void dump_with_types(ostream&,int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void dump_with_types(ostream&,int);
 };
 
 
@@ -430,8 +447,8 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
-void dump_with_types(ostream&,int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void dump_with_types(ostream&,int);
 };
 
 
@@ -448,8 +465,8 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
-void dump_with_types(ostream&,int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void dump_with_types(ostream&,int);
 };
 
 
@@ -466,8 +483,8 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
-void dump_with_types(ostream&,int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void dump_with_types(ostream&,int);
 };
 
 
@@ -482,8 +499,8 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
-void dump_with_types(ostream&,int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void dump_with_types(ostream&,int);
 };
 
 
@@ -500,8 +517,8 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
-void dump_with_types(ostream&,int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void dump_with_types(ostream&,int);
 };
 
 
@@ -518,8 +535,8 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
-void dump_with_types(ostream&,int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void dump_with_types(ostream&,int);
 };
 
 
@@ -536,8 +553,8 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
-void dump_with_types(ostream&,int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void dump_with_types(ostream&,int);
 };
 
 
@@ -552,8 +569,8 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
-void dump_with_types(ostream&,int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void dump_with_types(ostream&,int);
 };
 
 
@@ -568,8 +585,8 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
-void dump_with_types(ostream&,int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void dump_with_types(ostream&,int);
 };
 
 
@@ -584,8 +601,8 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
-void dump_with_types(ostream&,int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void dump_with_types(ostream&,int);
 };
 
 
@@ -600,8 +617,8 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
-void dump_with_types(ostream&,int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void dump_with_types(ostream&,int);
 };
 
 
@@ -616,8 +633,8 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
-void dump_with_types(ostream&,int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void dump_with_types(ostream&,int);
 };
 
 
@@ -632,8 +649,8 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
-void dump_with_types(ostream&,int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void dump_with_types(ostream&,int);
 };
 
 
@@ -646,8 +663,8 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
-void dump_with_types(ostream&,int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void dump_with_types(ostream&,int);
 };
 
 

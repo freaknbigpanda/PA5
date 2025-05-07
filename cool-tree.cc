@@ -8,7 +8,6 @@
 
 
 #include "tree.h"
-#include "cool-tree.handcode.h"
 #include "cool-tree.h"
 #include "cgen.h"
 #include "emit.h"
