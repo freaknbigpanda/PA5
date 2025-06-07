@@ -4,7 +4,6 @@ cool-lex.Scc
 *.out
 *.cl
 .vscode/*
-mycoolc
 *BACKUP*
 *.py
 lexer
