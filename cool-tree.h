@@ -12,8 +12,10 @@
 #include "cool.h"
 #include "stringtab.h"
 #include "symtab.h"
+#include "tac.h"
 #include <map>
 #include <iostream>
+#include <vector>
 
 // cool-tree.handcode.h
 #define yylineno curr_lineno;
@@ -85,7 +87,6 @@ public:
    virtual Symbol get_type() = 0;
 };
 
-
 // define simple phylum - Expression
 typedef class Expression_class *Expression;
 
@@ -101,6 +102,9 @@ public:
    virtual void dump_with_types(ostream&,int) = 0;  
    void dump_type(ostream&, int);               
    Expression_class() { type = (Symbol) NULL; }	
+
+   // IR generation interface
+   virtual void code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) = 0;
 };
 
 
@@ -277,8 +281,10 @@ public:
 
    void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
    void dump_with_types(ostream&,int);
-};
 
+   // IR generation interface
+   void code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter);
+};
 
 // define constructor - static_dispatch
 class static_dispatch_class : public Expression_class {
@@ -299,8 +305,10 @@ public:
 
    void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
    void dump_with_types(ostream&,int);
-};
 
+   // IR generation interface
+   void code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter);
+};
 
 // define constructor - dispatch
 class dispatch_class : public Expression_class {
@@ -319,8 +327,10 @@ public:
 
    void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
    void dump_with_types(ostream&,int);
-};
 
+   // IR generation interface
+   void code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter);
+};
 
 // define constructor - cond
 class cond_class : public Expression_class {
@@ -339,8 +349,10 @@ public:
 
    void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
    void dump_with_types(ostream&,int);
-};
 
+   // IR generation interface
+   void code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter);
+};
 
 // define constructor - loop
 class loop_class : public Expression_class {
@@ -357,8 +369,10 @@ public:
 
    void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
    void dump_with_types(ostream&,int);
-};
 
+   // IR generation interface
+   void code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter);
+};
 
 // define constructor - typcase
 class typcase_class : public Expression_class {
@@ -375,8 +389,10 @@ public:
 
    void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
    void dump_with_types(ostream&,int);
-};
 
+   // IR generation interface
+   void code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter);
+};
 
 // define constructor - block
 class block_class : public Expression_class {
@@ -391,8 +407,10 @@ public:
 
    void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
    void dump_with_types(ostream&,int);
-};
 
+   // IR generation interface
+   void code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter);
+};
 
 // define constructor - let
 class let_class : public Expression_class {
@@ -413,8 +431,10 @@ public:
 
    void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
    void dump_with_types(ostream&,int);
-};
 
+   // IR generation interface
+   void code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter);
+};
 
 // define constructor - plus
 class plus_class : public Expression_class {
@@ -431,8 +451,10 @@ public:
 
    void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
    void dump_with_types(ostream&,int);
-};
 
+   // IR generation interface
+   void code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter);
+};
 
 // define constructor - sub
 class sub_class : public Expression_class {
@@ -449,8 +471,10 @@ public:
 
    void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
    void dump_with_types(ostream&,int);
-};
 
+   // IR generation interface
+   void code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter);
+};
 
 // define constructor - mul
 class mul_class : public Expression_class {
@@ -467,8 +491,10 @@ public:
 
    void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
    void dump_with_types(ostream&,int);
-};
 
+   // IR generation interface
+   void code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter);
+};
 
 // define constructor - divide
 class divide_class : public Expression_class {
@@ -485,8 +511,10 @@ public:
 
    void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
    void dump_with_types(ostream&,int);
-};
 
+   // IR generation interface
+   void code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter);
+};
 
 // define constructor - neg
 class neg_class : public Expression_class {
@@ -501,8 +529,10 @@ public:
 
    void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
    void dump_with_types(ostream&,int);
-};
 
+   // IR generation interface
+   void code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter);
+};
 
 // define constructor - lt
 class lt_class : public Expression_class {
@@ -519,8 +549,10 @@ public:
 
    void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
    void dump_with_types(ostream&,int);
-};
 
+   // IR generation interface
+   void code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter);
+};
 
 // define constructor - eq
 class eq_class : public Expression_class {
@@ -537,8 +569,10 @@ public:
 
    void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
    void dump_with_types(ostream&,int);
-};
 
+   // IR generation interface
+   void code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter);
+};
 
 // define constructor - leq
 class leq_class : public Expression_class {
@@ -555,8 +589,10 @@ public:
 
    void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
    void dump_with_types(ostream&,int);
-};
 
+   // IR generation interface
+   void code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter);
+};
 
 // define constructor - comp
 class comp_class : public Expression_class {
@@ -571,8 +607,10 @@ public:
 
    void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
    void dump_with_types(ostream&,int);
-};
 
+   // IR generation interface
+   void code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter);
+};
 
 // define constructor - int_const
 class int_const_class : public Expression_class {
@@ -587,8 +625,10 @@ public:
 
    void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
    void dump_with_types(ostream&,int);
-};
 
+   // IR generation interface
+   void code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter);
+};
 
 // define constructor - bool_const
 class bool_const_class : public Expression_class {
@@ -603,8 +643,10 @@ public:
 
    void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
    void dump_with_types(ostream&,int);
-};
 
+   // IR generation interface
+   void code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter);
+};
 
 // define constructor - string_const
 class string_const_class : public Expression_class {
@@ -619,8 +661,10 @@ public:
 
    void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
    void dump_with_types(ostream&,int);
-};
 
+   // IR generation interface
+   void code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter);
+};
 
 // define constructor - new_
 class new__class : public Expression_class {
@@ -635,8 +679,10 @@ public:
 
    void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
    void dump_with_types(ostream&,int);
-};
 
+   // IR generation interface
+   void code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter);
+};
 
 // define constructor - isvoid
 class isvoid_class : public Expression_class {
@@ -651,8 +697,10 @@ public:
 
    void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
    void dump_with_types(ostream&,int);
-};
 
+   // IR generation interface
+   void code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter);
+};
 
 // define constructor - no_expr
 class no_expr_class : public Expression_class {
@@ -665,8 +713,10 @@ public:
 
    void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
    void dump_with_types(ostream&,int);
-};
 
+   // IR generation interface
+   void code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter);
+};
 
 // define constructor - object
 class object_class : public Expression_class {
@@ -681,6 +731,9 @@ public:
 
    void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
    void dump_with_types(ostream&,int);
+
+   // IR generation interface
+   void code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter);
 };
 
 

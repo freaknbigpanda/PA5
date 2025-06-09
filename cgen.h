@@ -33,11 +33,12 @@ private:
    List<CgenNode> *code_gen_classes;
    ostream& str;
    int lastclasstag;
+   bool is_tac_generated = false;
    CgenNodeMap cgen_nodes_for_tag;
    ClassNameToTagMap class_tag_for_name;
 
-// The following methods emit code for
-// constants and global declarations.
+   // The following methods emit code for
+   // constants and global declarations.
 
    void code_global_data();
    void code_global_text();
@@ -53,6 +54,11 @@ private:
    void code_object_initializers();
    void code_object_methods();
 
+   // The following methods generate three address code IR representation for optimizations 
+
+   void generate_tac_for_object_initializers();
+   void generate_tac_for_object_methods();
+
    // The following creates an inheritance graph from
    // a list of classes.  The graph is implemented as
    // a tree of `CgenNode', and class names are placed
@@ -65,6 +71,7 @@ private:
    void set_relations(CgenNodeP nd);
 public:
    CgenClassTable(Classes, ostream& str);
+   void generate_tac();
    void code();
    int get_next_class_tag(Symbol class_name);
    int get_tag_for_name(Symbol class_name) const;
@@ -88,11 +95,12 @@ private:
    SymbolTable<Symbol,CgenNode>* symbol_table;
 
    std::vector<MethodOwnerPair> methods;
-   // std::map<Symbol, MethodOwnerPair> method_name_map;
    std::map<Symbol, int> method_location_map;
    std::vector<AttrOwnerPair> attributes;
    std::map<Symbol, AttrOwnerPair> attribute_name_map;
    std::map<Symbol, void*> let_symbol_map;
+   std::vector<IRInstruction> initializer_ir;
+   std::map<Symbol, std::vector<IRInstruction>> method_name_to_ir_map;
 
 public:
    CgenNode(Class_ c,
@@ -111,13 +119,12 @@ public:
    StringEntryP get_string_entry() { return string_entry; }
    void set_size_attributes_methods();
    int get_attribute_location(Symbol attribute_name);
+   void set_initializer_ir(const std::vector<IRInstruction>& ir) { initializer_ir = ir; }
    int get_method_location(Symbol method_name) { 
       return method_location_map.find(method_name) == method_location_map.end() ? -1 : method_location_map[method_name]; 
    }
    void set_method_location(Symbol method_name, int location) { method_location_map[method_name] = location; }
-   // method_class* get_method(Symbol method_name) { 
-   //    return method_name_map.find(method_name) == method_name_map.end() ? nullptr : method_name_map[method_name].first; 
-   // }
+   void set_method_ir(Symbol method_name, const std::vector<IRInstruction>& ir) { method_name_to_ir_map[method_name] = ir; }
    std::vector<MethodOwnerPair> get_methods() const { return methods; }
    std::vector<AttrOwnerPair> get_attributes() const { return attributes; }
 };

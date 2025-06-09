@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <set>
 #include "cgen_gc.h"
+#include "tac.h"
 
 extern Symbol
          arg,
@@ -1238,8 +1239,6 @@ void eq_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, in
   emit_label_def(pointers_are_equal, s);
   // Restore the stack pointer
   emit_stack_size_pop(1, sp, s);
-
-
 }
 
 // Note: this is actually the not operator. No idea why it is called comp
@@ -1386,4 +1385,205 @@ void object_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string
       assert(attribute_location != -1);
       emit_load(ACC, 3 + attribute_location, SELF, s);
    }
+}
+
+// TAC Generation for Expressions
+
+std::string new_temp(int& temp_counter) {
+    return "t" + std::to_string(temp_counter++);
+}
+
+void assign_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {
+    std::string rhs = new_temp(temp_counter);
+    expr->code_ir(ir, rhs, temp_counter);
+    ir.push_back(IRInstruction(IROpcode::IR_ASSIGN, IROperand(IROperand::Kind::VAR, name->get_string()), IROperand(IROperand::Kind::VAR, rhs)));
+    if (!dst.empty())
+        ir.push_back(IRInstruction(IROpcode::IR_ASSIGN, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::VAR, rhs)));
+}
+
+void static_dispatch_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {
+    for (int i = 0; actual->more(i); i = actual->next(i)) {
+        std::string arg_temp = new_temp(temp_counter);
+        actual->nth(i)->code_ir(ir, arg_temp, temp_counter);
+        ir.push_back(IRInstruction(IROpcode::IR_PARAM, IROperand(IROperand::Kind::VAR, arg_temp)));
+    }
+    std::string obj_temp = new_temp(temp_counter);
+    expr->code_ir(ir, obj_temp, temp_counter);
+    ir.push_back(IRInstruction(IROpcode::IR_PARAM, IROperand(IROperand::Kind::VAR, obj_temp)));
+    ir.push_back(IRInstruction(IROpcode::IR_CALL, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::VAR, name->get_string())));
+}
+
+void dispatch_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {
+    for (int i = 0; actual->more(i); i = actual->next(i)) {
+        std::string arg_temp = new_temp(temp_counter);
+        actual->nth(i)->code_ir(ir, arg_temp, temp_counter);
+        ir.push_back(IRInstruction(IROpcode::IR_PARAM, IROperand(IROperand::Kind::VAR, arg_temp)));
+    }
+    std::string obj_temp = new_temp(temp_counter);
+    expr->code_ir(ir, obj_temp, temp_counter);
+    ir.push_back(IRInstruction(IROpcode::IR_PARAM, IROperand(IROperand::Kind::VAR, obj_temp)));
+    ir.push_back(IRInstruction(IROpcode::IR_CALL, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::VAR, name->get_string())));
+}
+
+void cond_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {
+    std::string pred_temp = new_temp(temp_counter);
+    pred->code_ir(ir, pred_temp, temp_counter);
+    std::string then_temp = new_temp(temp_counter);
+    std::string else_temp = new_temp(temp_counter);
+    std::string then_label = "then_" + std::to_string(temp_counter++);
+    std::string else_label = "else_" + std::to_string(temp_counter++);
+    std::string end_label = "endif_" + std::to_string(temp_counter++);
+    ir.push_back(IRInstruction(IROpcode::IR_IF_GOTO, IROperand(IROperand::Kind::VAR, pred_temp)));
+    ir.back().label = then_label;
+    ir.push_back(IRInstruction(IROpcode::IR_GOTO, else_label));
+    ir.push_back(IRInstruction(IROpcode::IR_LABEL, then_label));
+    then_exp->code_ir(ir, then_temp, temp_counter);
+    ir.push_back(IRInstruction(IROpcode::IR_ASSIGN, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::VAR, then_temp)));
+    ir.push_back(IRInstruction(IROpcode::IR_GOTO, end_label));
+    ir.push_back(IRInstruction(IROpcode::IR_LABEL, else_label));
+    else_exp->code_ir(ir, else_temp, temp_counter);
+    ir.push_back(IRInstruction(IROpcode::IR_ASSIGN, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::VAR, else_temp)));
+    ir.push_back(IRInstruction(IROpcode::IR_LABEL, end_label));
+}
+
+void loop_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {
+    std::string pred_temp = new_temp(temp_counter);
+    std::string body_temp = new_temp(temp_counter);
+    std::string loop_label = "loop_" + std::to_string(temp_counter++);
+    std::string end_label = "endloop_" + std::to_string(temp_counter++);
+    ir.push_back(IRInstruction(IROpcode::IR_LABEL, loop_label));
+    pred->code_ir(ir, pred_temp, temp_counter);
+    ir.push_back(IRInstruction(IROpcode::IR_IF_GOTO, IROperand(IROperand::Kind::VAR, pred_temp)));
+    ir.back().label = end_label;
+    body->code_ir(ir, body_temp, temp_counter);
+    ir.push_back(IRInstruction(IROpcode::IR_GOTO, loop_label));
+    ir.push_back(IRInstruction(IROpcode::IR_LABEL, end_label));
+    if (!dst.empty())
+        ir.push_back(IRInstruction(IROpcode::IR_ASSIGN, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::VAR, body_temp)));
+}
+
+void typcase_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {
+    std::string expr_temp = new_temp(temp_counter);
+    expr->code_ir(ir, expr_temp, temp_counter);
+    if (cases->len() > 0) {
+        branch_class* first_branch = static_cast<branch_class*>(cases->nth(0));
+        std::string branch_temp = new_temp(temp_counter);
+        first_branch->expr->code_ir(ir, branch_temp, temp_counter);
+        ir.push_back(IRInstruction(IROpcode::IR_ASSIGN, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::VAR, branch_temp)));
+    }
+}
+
+void block_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {
+    std::string last_temp;
+    for (int i = 0; body->more(i); i = body->next(i)) {
+        last_temp = new_temp(temp_counter);
+        body->nth(i)->code_ir(ir, last_temp, temp_counter);
+    }
+    if (!dst.empty())
+        ir.push_back(IRInstruction(IROpcode::IR_ASSIGN, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::VAR, last_temp)));
+}
+
+void let_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {
+    std::string init_temp = new_temp(temp_counter);
+    init->code_ir(ir, init_temp, temp_counter);
+    ir.push_back(IRInstruction(IROpcode::IR_ASSIGN, IROperand(IROperand::Kind::VAR, identifier->get_string()), IROperand(IROperand::Kind::VAR, init_temp)));
+    body->code_ir(ir, dst, temp_counter);
+}
+
+void plus_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {
+  std::string left = new_temp(temp_counter);
+  std::string right = new_temp(temp_counter);
+  e1->code_ir(ir, left, temp_counter);
+  e2->code_ir(ir, right, temp_counter);
+  ir.push_back(IRInstruction(IROpcode::IR_ADD, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::VAR, left), IROperand(IROperand::Kind::VAR, right)));
+}
+
+void sub_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {
+    std::string left = new_temp(temp_counter);
+    std::string right = new_temp(temp_counter);
+    e1->code_ir(ir, left, temp_counter);
+    e2->code_ir(ir, right, temp_counter);
+    ir.push_back(IRInstruction(IROpcode::IR_SUB, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::VAR, left), IROperand(IROperand::Kind::VAR, right)));
+}
+
+void mul_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {
+    std::string left = new_temp(temp_counter);
+    std::string right = new_temp(temp_counter);
+    e1->code_ir(ir, left, temp_counter);
+    e2->code_ir(ir, right, temp_counter);
+    ir.push_back(IRInstruction(IROpcode::IR_MUL, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::VAR, left), IROperand(IROperand::Kind::VAR, right)));
+}
+
+void divide_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {
+    std::string left = new_temp(temp_counter);
+    std::string right = new_temp(temp_counter);
+    e1->code_ir(ir, left, temp_counter);
+    e2->code_ir(ir, right, temp_counter);
+    ir.push_back(IRInstruction(IROpcode::IR_DIV, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::VAR, left), IROperand(IROperand::Kind::VAR, right)));
+}
+
+void neg_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {
+    std::string src = new_temp(temp_counter);
+    e1->code_ir(ir, src, temp_counter);
+    ir.push_back(IRInstruction(IROpcode::IR_NEG, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::VAR, src)));
+}
+
+void lt_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {
+    std::string left = new_temp(temp_counter);
+    std::string right = new_temp(temp_counter);
+    e1->code_ir(ir, left, temp_counter);
+    e2->code_ir(ir, right, temp_counter);
+    ir.push_back(IRInstruction(IROpcode::IR_LT, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::VAR, left), IROperand(IROperand::Kind::VAR, right)));
+}
+
+void leq_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {
+    std::string left = new_temp(temp_counter);
+    std::string right = new_temp(temp_counter);
+    e1->code_ir(ir, left, temp_counter);
+    e2->code_ir(ir, right, temp_counter);
+    ir.push_back(IRInstruction(IROpcode::IR_LEQ, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::VAR, left), IROperand(IROperand::Kind::VAR, right)));
+}
+
+void eq_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {
+    std::string left = new_temp(temp_counter);
+    std::string right = new_temp(temp_counter);
+    e1->code_ir(ir, left, temp_counter);
+    e2->code_ir(ir, right, temp_counter);
+    ir.push_back(IRInstruction(IROpcode::IR_EQ, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::VAR, left), IROperand(IROperand::Kind::VAR, right)));
+}
+
+void comp_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {
+    std::string src = new_temp(temp_counter);
+    e1->code_ir(ir, src, temp_counter);
+    ir.push_back(IRInstruction(IROpcode::IR_COMP, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::VAR, src)));
+}
+
+void int_const_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {
+    ir.push_back(IRInstruction(IROpcode::IR_CONST, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::CONST, std::stoi(token->get_string()))));
+}
+
+void bool_const_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {
+    ir.push_back(IRInstruction(IROpcode::IR_CONST, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::CONST, val ? 1 : 0)));
+}
+
+void string_const_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {
+    ir.push_back(IRInstruction(IROpcode::IR_CONST, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::VAR, token->get_string())));
+}
+
+void new__class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {
+    ir.push_back(IRInstruction(IROpcode::IR_CALL, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::VAR, type_name->get_string())));
+}
+
+void isvoid_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {
+    std::string src = new_temp(temp_counter);
+    e1->code_ir(ir, src, temp_counter);
+    ir.push_back(IRInstruction(IROpcode::IR_COMP, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::VAR, src)));
+}
+
+void no_expr_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {
+    ir.push_back(IRInstruction(IROpcode::IR_CONST, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::CONST, 0)));
+}
+
+void object_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {
+    ir.push_back(IRInstruction(IROpcode::IR_ASSIGN, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::VAR, name->get_string())));
 }
