@@ -44,14 +44,14 @@ void emit_load_bool(const char *dest, const BoolConst& b, ostream& s)
   s << endl;
 }
 
-void emit_load_string(char *dest, StringEntry *str, ostream& s)
+void emit_load_string(const char *dest, StringEntry *str, ostream& s)
 {
   emit_partial_load_address(dest,s);
   str->code_ref(s);
   s << endl;
 }
 
-void emit_load_int(char *dest, IntEntry *i, ostream& s)
+void emit_load_int(const char *dest, IntEntry *i, ostream& s)
 {
   emit_partial_load_address(dest,s);
   i->code_ref(s);
@@ -154,7 +154,7 @@ void emit_label_def(int l, ostream &s)
   s << ":" << endl;
 }
 
-void emit_jump(char *label, ostream &s)
+void emit_jump(const char *label, ostream &s)
 {
   s << JUMP << label << endl;
 }

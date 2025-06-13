@@ -31,6 +31,7 @@
 
 extern void emit_string_constant(ostream& str, char *s);
 extern int cgen_debug;
+extern int cgen_optimize;
 
 //
 // Three symbols from the semantic analyzer (semant.cc) are used.
@@ -387,7 +388,7 @@ CgenClassTable::CgenClassTable(Classes classes, ostream& s) : code_gen_classes(N
   install_basic_classes();
   install_classes(classes);
   build_inheritance_tree();
-  generate_tac();
+  if (cgen_optimize) generate_tac();
   code();
   exitscope();
 }
@@ -521,9 +522,74 @@ void CgenClassTable::code_dispatch_table()
   }
 }
 
+void CgenClassTable::generate_tac_for_object_initializers()
+{
+  for (auto it = cgen_nodes_for_tag.cbegin(); it != cgen_nodes_for_tag.cend(); ++it)
+  {
+    CgenNode* current_node_ptr = (*it).second;
+
+    // Optionally: create a label for the initializer (e.g., "init_ClassName")
+    // BL: TODO: Don't think I need this for TAC generation -
+    // std::string init_label = "init_" + std::string(current_node_ptr->name->get_string());
+    // ir.push_back(IRInstruction(IROpcode::IR_LABEL, init_label));
+
+    // In TAC, "self" is conventionally available as a variable.
+    // If you want to model saving ACC to self, you could do:
+    // BL: TODO: No need to model this in the IR since it is not required for the opimizations that I want to do
+    // ir.push_back(IRInstruction(IROpcode::IR_ASSIGN, IROperand(IROperand::Kind::VAR, "self"), IROperand(IROperand::Kind::VAR, "RET")));
+
+    // If not Object, call parent initializer
+    // if (current_node_ptr->name != Object)
+    // {
+    //   std::string parent_init = "init_" + std::string(current_node_ptr->parent->get_string());
+    //   ir.push_back(IRInstruction(IROpcode::IR_CALL, IROperand(IROperand::Kind::VAR, "void"), IROperand(IROperand::Kind::VAR, parent_init)));
+    // }
+
+    // Initialize attributes
+    std::vector<AttrOwnerPair> attributes = current_node_ptr->get_attributes();
+    for (auto ait = attributes.cbegin(); ait != attributes.cend(); ++ait)
+    {
+      attr_class* attribute = (*ait).first;
+      if ((*ait).second != current_node_ptr->name) continue; // skip inherited
+
+      Expression init_expr = attribute->init;
+      Symbol attr_type = attribute->type_decl;
+      bool isBasic = (attr_type == Int || attr_type == Str || attr_type == Bool);
+
+      // If no initializer and basic type, assign default value
+      if (dynamic_cast<no_expr_class*>(init_expr) != nullptr && isBasic)
+      {
+        // Assign default value for Int, Bool, Str
+        // BL: TODO: Don't need to do anything here because this is handled in the code generation step right now, doesn't need to be in the tac
+        // std::string attr_name = attribute->name->get_string();
+        // if (attr_type == Int)
+        //   ir.push_back(IRInstruction(IROpcode::IR_CONST, IROperand(IROperand::Kind::VAR, attr_name), IROperand(IROperand::Kind::CONST, 0)));
+        // else if (attr_type == Bool)
+        //   ir.push_back(IRInstruction(IROpcode::IR_CONST, IROperand(IROperand::Kind::VAR, attr_name), IROperand(IROperand::Kind::CONST, 0)));
+        // else if (attr_type == Str)
+        //   ir.push_back(IRInstruction(IROpcode::IR_CONST, IROperand(IROperand::Kind::VAR, attr_name), IROperand(IROperand::Kind::VAR, "")));
+      }
+      else
+      {
+        // Generate TAC for the initializer expression
+        int temp_counter = 0;
+        std::vector<IRInstruction> ir;
+        init_expr->code_ir(ir, attribute->name->get_string(), temp_counter);
+        // todo: Should be using move semantics here as well to avoid IR copy
+        current_node_ptr->set_attr_init_ir(attribute->name, ir);
+      }
+    }
+
+    // BL: TODO Don't think we need this
+    // Optionally: add a return instruction
+    // ir.push_back(IRInstruction(IROpcode::IR_RET, IROperand(IROperand::Kind::VAR, "self")));
+  }
+}
+
 // todo: Make sure to test initialization of attributes that reference other attributes of the same class
 void CgenClassTable::code_object_initializers()
 {
+
   for(auto it = cgen_nodes_for_tag.cbegin(); it != cgen_nodes_for_tag.cend(); ++it)
   {
     CgenNode* current_node_ptr = (*it).second;
@@ -537,6 +603,7 @@ void CgenClassTable::code_object_initializers()
 
     // Save the value of self into register S0
     // note that init is *always* called after Object.copy which leaves a copy of the proto-object in ACC
+    // so we copy it here to the designated "self" register, confusing that the cool reference manual desginates this register s0 as callee saved though.. need to figure that out.
     emit_move(SELF, ACC, str);
     
     if (current_node_ptr->name != Object)
@@ -574,12 +641,20 @@ void CgenClassTable::code_object_initializers()
       {
         // Emit code for attribute initialization
         // Note: this will copy zero into ACC for no_expr_class
-        SymbolTable<std::string, int> formal_table; // no method parameters for init methods so no need to populate the symbol table here with any offsets
-        attribute->init->code(str, current_node_ptr, formal_table, sp, 0);
+        SymbolTable<std::string, int> symbol_table; // no method parameters for init methods so no need to populate the symbol table here with any offsets
+        if (cgen_optimize) 
+        {
+          current_node_ptr->code_attr_init_from_ir(str, attribute->name, symbol_table, sp, 0);
+        } 
+        else 
+        {
+          attribute->init->code(str, current_node_ptr, symbol_table, sp, 0);
+        }
       }
 
       // Store the result of the attribute initialization in the correct location in the heap
       int attribute_index = current_node_ptr->get_attribute_location(attribute->name);
+      // todo: replace with DEFAULT_OBJFIELDS, but first make sure that this constant is defined for this purpose.
       emit_store(ACC, attribute_index + 3, SELF, str);
     }
 
@@ -588,6 +663,56 @@ void CgenClassTable::code_object_initializers()
 
     emit_method_suffix(str, 0);
     if (cgen_debug) cout << "sp after coding init method for class " << current_node_ptr->get_name()->get_string() << " is " << sp << endl;
+  }
+}
+
+void CgenClassTable::generate_tac_for_object_methods()
+{
+  for (auto it = cgen_nodes_for_tag.cbegin(); it != cgen_nodes_for_tag.cend(); ++it)
+  {
+    CgenNode* current_node_ptr = (*it).second;
+    // Skip basic classes
+    if (current_node_ptr->basic()) continue;
+
+    std::vector<MethodOwnerPair> methods = current_node_ptr->get_methods();
+    for (auto methodOwnerPair = methods.cbegin(); methodOwnerPair != methods.cend(); ++methodOwnerPair)
+    {
+      // Only generate code for methods defined in this class (not inherited)
+      if ((*methodOwnerPair).second != current_node_ptr->name) continue;
+
+      method_class* method = (*methodOwnerPair).first;
+
+      // Optionally: create a label for the method (e.g., "ClassName.method")
+      // std::string method_label = std::string(current_node_ptr->name->get_string()) + "." + std::string(method->name->get_string());
+      // ir.push_back(IRInstruction(IROpcode::IR_LABEL, method_label));
+
+      // Optionally: assign "self" variable (in TAC, "self" is conventionally available)
+      // ir.push_back(IRInstruction(IROpcode::IR_ASSIGN, IROperand(IROperand::Kind::VAR, "self"), IROperand(IROperand::Kind::VAR, "ACC")));
+
+      // Generate code for formals (parameters)
+      // In TAC, you may want to assign parameters to variables named after their formal names
+      for (int i = method->formals->first(); method->formals->more(i); i = method->formals->next(i))
+      {
+        Symbol formal_name = method->formals->nth(i)->get_name();
+        // In a real implementation, you might want to map incoming parameters to these names
+        // For now, assume parameters are already in variables named after their formals
+        // If you want to model parameter passing, you could add IR_PARAM instructions here
+      }
+
+      // Generate TAC for the method body
+      // Result to be placed in ACC as per mips assembly conventions
+      std::vector<IRInstruction> ir;
+      int temp_counter = 0;
+      method->expr->code_ir(ir, ACC, temp_counter);
+
+      // Optionally: add a return instruction
+      // BL: TODO: Don't think I need this for TAC Generation
+      // ir.push_back(IRInstruction(IROpcode::IR_RET, IROperand(IROperand::Kind::VAR, "RET")));
+
+      // Store the IR for this method
+      // todo: I think I should be using move semantics here to avoid copying the IR
+      current_node_ptr->set_method_ir(method->name, ir);
+    }
   }
 }
 
@@ -630,7 +755,16 @@ void CgenClassTable::code_object_methods()
         symbol_table.addid(method->formals->nth(i)->get_name()->get_string(), fp_offset);
       }
 
-      method->expr->code(str, current_node_ptr, symbol_table, sp, parameters->len());
+      if (cgen_optimize)
+      {
+        // If we are optimizing, we can use the IR code that was generated for this method
+        current_node_ptr->code_method_from_ir(str, method->name, symbol_table, sp, parameters->len());
+      }
+      else
+      {
+        // Else go directly to asm
+        method->expr->code(str, current_node_ptr, symbol_table, sp, parameters->len());
+      }
 
       emit_method_suffix(str, parameters->len());
       if (cgen_debug) cout << "sp after coding method " << method->name->get_string() << " for class " << current_node_ptr->get_name()->get_string() << " is " << sp << endl;
@@ -841,6 +975,7 @@ void CgenNode::set_parentnd(CgenNodeP p)
 
 void CgenNode::set_size_attributes_methods()
 {
+  // todo: I think this should be replaced with DEFAULT_OBJFIELDS - verify that that is the case
   size = 3; // base object has a size of at least 3 for the class tag, object size, and dispatch pointer
 
   // First construct the list of classes to traverse
@@ -916,6 +1051,20 @@ int CgenNode::get_attribute_location(Symbol attribute_name)
   }
 }
 
+int CgenNode::get_attribute_location(const std::string& attribute_name)
+{
+  auto attribute = std::find_if(attributes.cbegin(), attributes.cend(), 
+  [&attribute_name](AttrOwnerPair currentPair) { return currentPair.second->get_string() == attribute_name; });
+  if (attribute == attributes.cend())
+  {
+    return -1; // Attribute not found
+  }
+  else
+  {
+    return attribute - attributes.cbegin(); // return the location of the attribute
+  }
+}
+
 void CgenClassTable::generate_tac()
 {
   if (cgen_debug) cout << "Generating three address code for CgenClassTable" << endl;
@@ -927,123 +1076,6 @@ void CgenClassTable::generate_tac()
   generate_tac_for_object_methods();
 
   is_tac_generated = true;
-}
-
-void CgenClassTable::generate_tac_for_object_initializers()
-{
-  for (auto it = cgen_nodes_for_tag.cbegin(); it != cgen_nodes_for_tag.cend(); ++it)
-  {
-    CgenNode* current_node_ptr = (*it).second;
-    // Skip basic classes
-    if (current_node_ptr->basic()) continue;
-
-    // Prepare a vector to hold the IR for this initializer
-    std::vector<IRInstruction> ir;
-
-    // Optionally: create a label for the initializer (e.g., "init_ClassName")
-    // BL: TODO: Don't think I need this for TAC generation
-    // std::string init_label = "init_" + std::string(current_node_ptr->name->get_string());
-    // ir.push_back(IRInstruction(IROpcode::IR_LABEL, init_label));
-
-    // In TAC, "self" is conventionally available as a variable.
-    // If you want to model saving ACC to self, you could do:
-    // BL: TODO: No need to model this in the IR since it is not required for the opimizations that I want to do
-    // ir.push_back(IRInstruction(IROpcode::IR_ASSIGN, IROperand(IROperand::Kind::VAR, "self"), IROperand(IROperand::Kind::VAR, "ACC")));
-
-    // If not Object, call parent initializer
-    if (current_node_ptr->name != Object)
-    {
-      std::string parent_init = "init_" + std::string(current_node_ptr->parent->get_string());
-      ir.push_back(IRInstruction(IROpcode::IR_CALL, IROperand(IROperand::Kind::VAR, "void"), IROperand(IROperand::Kind::VAR, parent_init)));
-    }
-
-    // Initialize attributes
-    std::vector<AttrOwnerPair> attributes = current_node_ptr->get_attributes();
-    for (auto ait = attributes.cbegin(); ait != attributes.cend(); ++ait)
-    {
-      attr_class* attribute = (*ait).first;
-      if ((*ait).second != current_node_ptr->name) continue; // skip inherited
-
-      Expression init_expr = attribute->init;
-      Symbol attr_type = attribute->type_decl;
-      bool isBasic = (attr_type == Int || attr_type == Str || attr_type == Bool);
-
-      // If no initializer and basic type, assign default value
-      if (dynamic_cast<no_expr_class*>(init_expr) != nullptr && isBasic)
-      {
-        // Assign default value for Int, Bool, Str
-        std::string attr_name = attribute->name->get_string();
-        if (attr_type == Int)
-          ir.push_back(IRInstruction(IROpcode::IR_CONST, IROperand(IROperand::Kind::VAR, attr_name), IROperand(IROperand::Kind::CONST, 0)));
-        else if (attr_type == Bool)
-          ir.push_back(IRInstruction(IROpcode::IR_CONST, IROperand(IROperand::Kind::VAR, attr_name), IROperand(IROperand::Kind::CONST, 0)));
-        else if (attr_type == Str)
-          ir.push_back(IRInstruction(IROpcode::IR_CONST, IROperand(IROperand::Kind::VAR, attr_name), IROperand(IROperand::Kind::VAR, "")));
-      }
-      else
-      {
-        // Generate TAC for the initializer expression
-        std::string attr_name = attribute->name->get_string();
-        int temp_counter = 0;
-        init_expr->code_ir(ir, attr_name, temp_counter);
-      }
-    }
-
-    // BL: TODO Don't think we need this
-    // Optionally: add a return instruction
-    // ir.push_back(IRInstruction(IROpcode::IR_RET, IROperand(IROperand::Kind::VAR, "self")));
-
-    current_node_ptr->set_initializer_ir(ir);
-  }
-}
-
-void CgenClassTable::generate_tac_for_object_methods()
-{
-  for (auto it = cgen_nodes_for_tag.cbegin(); it != cgen_nodes_for_tag.cend(); ++it)
-  {
-    CgenNode* current_node_ptr = (*it).second;
-    // Skip basic classes
-    if (current_node_ptr->basic()) continue;
-
-    std::vector<MethodOwnerPair> methods = current_node_ptr->get_methods();
-    for (auto methodOwnerPair = methods.cbegin(); methodOwnerPair != methods.cend(); ++methodOwnerPair)
-    {
-      // Only generate code for methods defined in this class (not inherited)
-      if ((*methodOwnerPair).second != current_node_ptr->name) continue;
-
-      method_class* method = (*methodOwnerPair).first;
-      std::vector<IRInstruction> ir;
-      int temp_counter = 0;
-
-      // Optionally: create a label for the method (e.g., "ClassName.method")
-      // std::string method_label = std::string(current_node_ptr->name->get_string()) + "." + std::string(method->name->get_string());
-      // ir.push_back(IRInstruction(IROpcode::IR_LABEL, method_label));
-
-      // Optionally: assign "self" variable (in TAC, "self" is conventionally available)
-      // ir.push_back(IRInstruction(IROpcode::IR_ASSIGN, IROperand(IROperand::Kind::VAR, "self"), IROperand(IROperand::Kind::VAR, "ACC")));
-
-      // Generate code for formals (parameters)
-      // In TAC, you may want to assign parameters to variables named after their formal names
-      for (int i = method->formals->first(); method->formals->more(i); i = method->formals->next(i))
-      {
-        Symbol formal_name = method->formals->nth(i)->get_name();
-        // In a real implementation, you might want to map incoming parameters to these names
-        // For now, assume parameters are already in variables named after their formals
-        // If you want to model parameter passing, you could add IR_PARAM instructions here
-      }
-
-      // Generate TAC for the method body
-      // The result should be placed in a variable named "RET" (or similar convention)
-      method->expr->code_ir(ir, "RET", temp_counter);
-
-      // Optionally: add a return instruction
-      // BL: TODO: Don't think I need this for TAC Generation
-      //ir.push_back(IRInstruction(IROpcode::IR_RET, IROperand(IROperand::Kind::VAR, "RET")));
-
-      // Store or emit the IR for this method as needed
-      current_node_ptr->set_method_ir(method->name, ir);
-    }
-  }
 }
 
 void CgenClassTable::code()
@@ -1131,4 +1163,28 @@ CgenNode::CgenNode(Class_ nd, Basicness bstatus, CgenClassTableP ct) :
   }
    
   // Note that we do not initialize the size variable here because we don't know the size of the proto-object until we build the inheritance graph
+}
+
+void CgenNode::code_attr_init_from_ir(ostream &s, Symbol attribute_name, SymbolTable<std::string, int> formals_table, int& sp, int /*num_params*/)
+{
+  auto it = attribute_name_to_ir_map.find(attribute_name);
+  if (it == attribute_name_to_ir_map.end()) abort(); // Attribute not found
+  
+  cout << "coding attribute initialization for " << attribute_name->get_string() << " from tac instructions: " << endl;
+  for (const IRInstruction& instruction : it->second) {
+    cout << instruction << endl;
+    instruction.code(s, this, formals_table, sp, 0);
+  }
+}
+
+void CgenNode::code_method_from_ir(ostream &s, Symbol method_name, SymbolTable<std::string, int> formals_table, int& sp, int num_params)
+{
+  auto it = method_name_to_ir_map.find(method_name);
+  if (it == method_name_to_ir_map.end()) abort(); // Method not found
+
+  cout << "coding method " << method_name->get_string() << " from tac instructions: " << endl;
+  for (const IRInstruction& instruction : it->second) {
+    cout << instruction << endl;
+    instruction.code(s, this, formals_table, sp, num_params);
+  }
 }

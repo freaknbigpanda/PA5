@@ -1396,9 +1396,10 @@ std::string new_temp(int& temp_counter) {
 void assign_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {
     std::string rhs = new_temp(temp_counter);
     expr->code_ir(ir, rhs, temp_counter);
-    ir.push_back(IRInstruction(IROpcode::IR_ASSIGN, IROperand(IROperand::Kind::VAR, name->get_string()), IROperand(IROperand::Kind::VAR, rhs)));
-    if (!dst.empty())
-        ir.push_back(IRInstruction(IROpcode::IR_ASSIGN, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::VAR, rhs)));
+    ir.push_back(IRInstruction(IROpcode::IR_ASSIGN, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::VAR, rhs)));
+   // no idea what the AI added this  
+   //  if (!dst.empty())
+   //      ir.push_back(IRInstruction(IROpcode::IR_ASSIGN, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::VAR, rhs)));
 }
 
 void static_dispatch_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {
@@ -1479,8 +1480,7 @@ void block_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& 
         last_temp = new_temp(temp_counter);
         body->nth(i)->code_ir(ir, last_temp, temp_counter);
     }
-    if (!dst.empty())
-        ir.push_back(IRInstruction(IROpcode::IR_ASSIGN, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::VAR, last_temp)));
+    ir.push_back(IRInstruction(IROpcode::IR_ASSIGN, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::VAR, last_temp)));
 }
 
 void let_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {
@@ -1559,15 +1559,15 @@ void comp_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& t
 }
 
 void int_const_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {
-    ir.push_back(IRInstruction(IROpcode::IR_CONST, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::CONST, std::stoi(token->get_string()))));
+    ir.push_back(IRInstruction(IROpcode::IR_CONST, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::CONST_INT, token->get_string())));
 }
 
 void bool_const_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {
-    ir.push_back(IRInstruction(IROpcode::IR_CONST, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::CONST, val ? 1 : 0)));
+    ir.push_back(IRInstruction(IROpcode::IR_CONST, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::CONST_BOOL, val ? "true" : "false")));
 }
 
 void string_const_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {
-    ir.push_back(IRInstruction(IROpcode::IR_CONST, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::VAR, token->get_string())));
+    ir.push_back(IRInstruction(IROpcode::IR_CONST, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::CONST_STR, token->get_string())));
 }
 
 void new__class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {
@@ -1581,7 +1581,7 @@ void isvoid_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int&
 }
 
 void no_expr_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {
-    ir.push_back(IRInstruction(IROpcode::IR_CONST, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::CONST, 0)));
+    ir.push_back(IRInstruction(IROpcode::IR_CONST, IROperand(IROperand::Kind::VAR, dst), IROperand(IROperand::Kind::CONST_INT, "0")));
 }
 
 void object_class::code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) {

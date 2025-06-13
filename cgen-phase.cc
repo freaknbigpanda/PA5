@@ -31,11 +31,11 @@ int main(int argc, char *argv[]) {
   }
 
 // *** Hack code to read the typed ast from the command line so that we can debug
-    // ast_file = fopen(argv[optind], "r");
-    // if (ast_file == NULL) {
-    //     cerr << "Could not open input ast file " << argv[optind] << endl;
-    //     exit(1);
-    // }
+    ast_file = fopen(argv[optind], "r");
+    if (ast_file == NULL) {
+        cerr << "Could not open input ast file " << argv[optind] << endl;
+        exit(1);
+    }
 // *** Remove for submission
 
   // 
@@ -55,7 +55,7 @@ int main(int argc, char *argv[]) {
   }
 
 // *** Hack code to read the typed ast from the command line so that we can debug
-    // fclose(ast_file);
+    fclose(ast_file);
 // *** Remove for submission
 }
 

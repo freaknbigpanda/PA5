@@ -105,6 +105,9 @@ public:
 
    // IR generation interface
    virtual void code_ir(std::vector<IRInstruction>& ir, std::string dst, int& temp_counter) = 0;
+
+   // TODO: Decide if it makes sense to do this refactor, I think it just depends where I am going to be storing my IR
+   // virtual void code_asm_from_ir(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int) = 0;
 };
 
 

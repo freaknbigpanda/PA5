@@ -98,10 +98,9 @@ private:
    std::map<Symbol, int> method_location_map;
    std::vector<AttrOwnerPair> attributes;
    std::map<Symbol, AttrOwnerPair> attribute_name_map;
-   std::map<Symbol, void*> let_symbol_map;
-   std::vector<IRInstruction> initializer_ir;
+   std::map<Symbol, std::vector<IRInstruction>> attribute_name_to_ir_map;
    std::map<Symbol, std::vector<IRInstruction>> method_name_to_ir_map;
-
+   
 public:
    CgenNode(Class_ c,
             Basicness bstatus,
@@ -112,19 +111,22 @@ public:
    void set_parentnd(CgenNodeP p);
    CgenNodeP get_parentnd() { return parentnd; }
    int basic() { return (basic_status == Basic); }
-   int get_size() { return size; }
+   int get_size() { return size;}
    int get_tag() { return tag; }
    int get_inheritance_depth() { return inheritance_depth; }
    SymbolTable<Symbol,CgenNode>* get_symbol_table() { return symbol_table; }
    StringEntryP get_string_entry() { return string_entry; }
    void set_size_attributes_methods();
    int get_attribute_location(Symbol attribute_name);
-   void set_initializer_ir(const std::vector<IRInstruction>& ir) { initializer_ir = ir; }
+   int get_attribute_location(const std::string& attribute_name);
+   void set_attr_init_ir(Symbol attribute_name, const std::vector<IRInstruction>& ir) { attribute_name_to_ir_map[attribute_name] = ir; } 
    int get_method_location(Symbol method_name) { 
       return method_location_map.find(method_name) == method_location_map.end() ? -1 : method_location_map[method_name]; 
    }
    void set_method_location(Symbol method_name, int location) { method_location_map[method_name] = location; }
    void set_method_ir(Symbol method_name, const std::vector<IRInstruction>& ir) { method_name_to_ir_map[method_name] = ir; }
+   void code_attr_init_from_ir(ostream &s, Symbol attribute_name, SymbolTable<std::string, int> formals_table, int& sp, int num_params);
+   void code_method_from_ir(ostream &s, Symbol method_name, SymbolTable<std::string, int> formals_table, int& sp, int num_params);
    std::vector<MethodOwnerPair> get_methods() const { return methods; }
    std::vector<AttrOwnerPair> get_attributes() const { return attributes; }
 };
