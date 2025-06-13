@@ -750,8 +750,8 @@ SymbolTable<std::string, int> formals_table, int& sp, bool is_dynamic, int num_p
       parameters->nth(i)->code(s, cgen_node, formals_table, sp, num_params);
 
       // Copy the parameter to a new location on the heap as specified by cool operational semantics
-      // todo: it may be possible to optimize this out in certain situations
-      //emit_object_copy(s);
+      // todo: Doesn't seem to be needed because I fail a test with this not commented out
+      // emit_object_copy(s);
 
       emit_store(ACC, 0, SP, s);
 
@@ -980,7 +980,7 @@ void typcase_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::strin
 
       // add the case statement definition to the scope
 
-      // Push the result of the copy onto the stack
+      // Push the result of the case predicate evaluation onto the stack so that the case body expression can access it
       emit_store(ACC, 0, SP, s);
 
       // bump the stack pointer
@@ -1370,8 +1370,7 @@ void object_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string
 {
    if (name == self) 
    {
-      //todo: I am a bit worried here because I don't know if S0 will always store a pointer to self or not
-      //todo: Convince yourself that S0 will always contain a pointer to self
+      // Note: $s0 always refers to SELF
       emit_move(ACC, SELF, s);
    }
    else if (formals_table.lookup(name->get_string()) != nullptr)

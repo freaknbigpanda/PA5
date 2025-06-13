@@ -273,8 +273,7 @@ void emit_method_prefix(ostream &str, int parameter_count, int& sp)
   // Grow the stack 12 bytes for 3 words worth of shit
   emit_stack_size_push(3, sp, str); // SP = -3
   // Preserve all of the registers we have to for a function call
-  // Todo: the runtime system pdf mentions that s0-s7 are "The standard callee-saved registers on the MIPS architecture" so not sure if I need to save them all here or not
-  // I should only need to save these registers if I use them
+  // Note: if we use more of the $sx registers we will need to add more instructions here and in the method_suffix function to save them
   emit_store(FP, 3, SP, str); // Store at SP = 0
   emit_store(SELF, 2, SP, str); // Store at SP = -1
   emit_store(RA, 1, SP, str); // Store at SP = -2

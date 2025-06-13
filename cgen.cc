@@ -522,7 +522,6 @@ void CgenClassTable::code_dispatch_table()
   }
 }
 
-// todo: Make sure to test initialization of attributes that reference other attributes of the same class
 void CgenClassTable::code_object_initializers()
 {
   for(auto it = cgen_nodes_for_tag.cbegin(); it != cgen_nodes_for_tag.cend(); ++it)
@@ -534,13 +533,10 @@ void CgenClassTable::code_object_initializers()
     int sp = 0;
     emit_method_prefix(str, 0, sp);
 
-    // todo: the cool runtime pdf mentions that ACC is saved for init methods.. not sure if I am doing that properly here or not
-
     // Save the value of self into register S0
     // note that init is *always* called after Object.copy which leaves a copy of the proto-object in ACC
     emit_move(SELF, ACC, str);
     
-
     if (current_node_ptr->name != Object)
     {
       std::stringstream init_ref;
@@ -585,7 +581,7 @@ void CgenClassTable::code_object_initializers()
       emit_store(ACC, attribute_index + DEFAULT_OBJFIELDS, SELF, str);
     }
 
-    // Restore the value of self back to register A0 before the method exits
+    // $a0 is callee saved for the init methods so restore the value of self back to register $a0 before the method exits
     emit_move(ACC, SELF, str);
 
     emit_method_suffix(str, 0);
@@ -775,8 +771,7 @@ void CgenClassTable::install_class(CgenNodeP nd)
 
   if (probe(name))
   {
-    abort();
-    return; // todo: not sure when this would get hit
+    return;
   }
 
   // The class name is legal, so add it to the list of classes
