@@ -582,7 +582,7 @@ void CgenClassTable::code_object_initializers()
 
       // Store the result of the attribute initialization in the correct location in the heap
       int attribute_index = current_node_ptr->get_attribute_location(attribute->name);
-      emit_store(ACC, attribute_index + 3, SELF, str);
+      emit_store(ACC, attribute_index + DEFAULT_OBJFIELDS, SELF, str);
     }
 
     // Restore the value of self back to register A0 before the method exits
@@ -843,7 +843,7 @@ void CgenNode::set_parentnd(CgenNodeP p)
 
 void CgenNode::set_size_attributes_methods()
 {
-  size = 3; // base object has a size of at least 3 for the class tag, object size, and dispatch pointer
+  size = DEFAULT_OBJFIELDS; // base object has a size of at least 3 for the class tag, object size, and dispatch pointer
 
   // First construct the list of classes to traverse
   std::vector<CgenNodeP> classes;
