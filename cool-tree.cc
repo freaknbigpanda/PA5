@@ -1238,8 +1238,6 @@ void eq_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, in
   emit_label_def(pointers_are_equal, s);
   // Restore the stack pointer
   emit_stack_size_pop(1, sp, s);
-
-
 }
 
 // Note: this is actually the not operator. No idea why it is called comp

@@ -270,13 +270,14 @@ void emit_gc_check(char *source, ostream &s)
 
 void emit_method_prefix(ostream &str, int parameter_count, int& sp) 
 {
-  // Grow the stack 12 bytes for 3 words worth of shit
+  // Grow the stack 12 bytes for 3 words worth of shit sp == 0
   emit_stack_size_push(3, sp, str); // SP = -3
   // Preserve all of the registers we have to for a function call
   // Note: if we use more of the $sx registers we will need to add more instructions here and in the method_suffix function to save them
   emit_store(FP, 3, SP, str); // Store at SP = 0
   emit_store(SELF, 2, SP, str); // Store at SP = -1
   emit_store(RA, 1, SP, str); // Store at SP = -2
+  // SP points to new stack memory 
 
   emit_addiu(FP, SP, 12 + (WORD_SIZE * parameter_count), str); // FP now points to the first parameter
 }

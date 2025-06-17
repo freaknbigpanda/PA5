@@ -50,6 +50,7 @@ private:
    void code_inheritance_table();
    void code_class_tag_table();
    void code_dispatch_table();
+   void generate_init_ir();
    void code_object_initializers();
    void code_object_methods();
 

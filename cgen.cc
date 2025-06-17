@@ -24,6 +24,7 @@
 
 #include "cgen.h"
 #include "cgen_gc.h"
+#include "ir.h"
 #include <vector>
 #include <sstream>
 #include <set>
@@ -522,6 +523,80 @@ void CgenClassTable::code_dispatch_table()
   }
 }
 
+void CgenClassTable::generate_init_ir()
+{
+  std::vector<IRStatement> tac_statements;
+
+  for(auto it = cgen_nodes_for_tag.cbegin(); it != cgen_nodes_for_tag.cend(); ++it)
+  {
+    CgenNode* current_node_ptr = (*it).second;
+    tac_statements.push_back(IRLabel(current_node_ptr->name->get_string()));
+    
+    int sp = 0;
+    append_ir_method_prefix(tac_statements, 0, sp);
+
+    // Save the value of self into register S0
+    // note that init is *always* called after Object.copy which leaves a copy of the proto-object in ACC
+    //emit_move(SELF, ACC, str);
+    // tac_statements.push_back(IRMove(IROperand(SELF), IROperand(ACC)));
+    
+    if (current_node_ptr->name != Object)
+    {
+      std::stringstream init_ref;
+      emit_init_ref(current_node_ptr->parent, init_ref);
+      tac_statements.push_back(IRLableJump(init_ref.str()));
+    }
+
+    // Initializing attributes
+    std::vector<AttrOwnerPair> attributes = current_node_ptr->get_attributes();
+    for (auto it = attributes.cbegin(); it != attributes.cend(); ++it)
+    {
+      attr_class* attribute = (*it).first;
+
+      if ((*it).second != current_node_ptr->name) continue; // we don't need to initialize superclass attributes
+
+      Expression init_expr = attribute->init;
+      Symbol attr_type = attribute->type_decl;
+      bool isBasic = (attr_type == Int || attr_type == Str || attr_type == Bool);
+
+      // If the type is an Int or String and there is no expression, init with default proto-obj, otherwise emit code for the initialization expression
+      if (dynamic_cast<no_expr_class*>(init_expr) != nullptr && isBasic)
+      {
+        // If we don't have an expression init the attribute to the value of the appropiate proto obj
+        // Load the proto object address into ACC
+        // Note that for non-basic types we just let them initialize to void
+        emit_partial_load_address(ACC, str);
+        emit_protobj_ref(attr_type, str);
+        str << endl;
+        
+        std::string protoObjRef = std::string(attr_type->get_string()) + PROTOBJ_SUFFIX;
+        tac_statements.push_back(IRLoad(IROperand(ACC), IRLabelOperand(protoObjRef), IROperand(0)));
+
+        // tac_statements.push_back(IRRegJump(IROperand))
+        // tac_statements.push_back(IRLabelJumpAndLink())
+        // emit_object_copy(str);
+      }
+      else
+      {
+        // Emit code for attribute initialization
+        // Note: this will copy zero into ACC for no_expr_class
+        SymbolTable<std::string, int> formal_table; // no method parameters for init methods so no need to populate the symbol table here with any offsets
+        attribute->init->code(str, current_node_ptr, formal_table, sp, 0);
+      }
+
+      // Store the result of the attribute initialization in the correct location in the heap
+      int attribute_index = current_node_ptr->get_attribute_location(attribute->name);
+      emit_store(ACC, attribute_index + DEFAULT_OBJFIELDS, SELF, str);
+    }
+
+    // $a0 is callee saved for the init methods so restore the value of self back to register $a0 before the method exits
+    emit_move(ACC, SELF, str);
+
+    emit_method_suffix(str, 0);
+    if (cgen_debug) cout << "sp after coding init method for class " << current_node_ptr->get_name()->get_string() << " is " << sp << endl;
+  }
+}
+
 void CgenClassTable::code_object_initializers()
 {
   for(auto it = cgen_nodes_for_tag.cbegin(); it != cgen_nodes_for_tag.cend(); ++it)
@@ -616,8 +691,8 @@ void CgenClassTable::code_object_methods()
       emit_move(SELF, ACC, str);
 
       // Contains frame pointer offsets for both local variables and parameters
-      SymbolTable<std::string, int> symbol_table;
-      symbol_table.enterscope();
+      SymbolTable<std::string, int> formals_table;
+      formals_table.enterscope();
 
       // Add formal FP offset for all of the formal identifiers (aka method parameters)
       for(int i = method->formals->first(); method->formals->more(i); i = method->formals->next(i))
@@ -625,15 +700,15 @@ void CgenClassTable::code_object_methods()
         // All of the formals will have already been pushed onto the stack by the dispatch call so we just need to set up the offset for the frame pointer here
         int* fp_offset = new int;
         *fp_offset = i * -1;
-        symbol_table.addid(method->formals->nth(i)->get_name()->get_string(), fp_offset);
+        formals_table.addid(method->formals->nth(i)->get_name()->get_string(), fp_offset);
       }
 
-      method->expr->code(str, current_node_ptr, symbol_table, sp, parameters->len());
+      method->expr->code(str, current_node_ptr, formals_table, sp, parameters->len());
 
       emit_method_suffix(str, parameters->len());
       if (cgen_debug) cout << "sp after coding method " << method->name->get_string() << " for class " << current_node_ptr->get_name()->get_string() << " is " << sp << endl;
 
-      symbol_table.exitscope();
+      formals_table.exitscope();
     }
   }
 }
