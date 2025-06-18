@@ -268,7 +268,7 @@ void emit_gc_check(char *source, ostream &s)
   s << JAL << "_gc_check" << endl;
 }
 
-void emit_method_prefix(ostream &str, int parameter_count, int& sp) 
+void emit_callee_saves(ostream &str, int& sp) 
 {
   // Grow the stack 12 bytes for 3 words worth of shit sp == 0
   emit_stack_size_push(3, sp, str); // SP = -3
@@ -278,17 +278,11 @@ void emit_method_prefix(ostream &str, int parameter_count, int& sp)
   emit_store(SELF, 2, SP, str); // Store at SP = -1
   emit_store(RA, 1, SP, str); // Store at SP = -2
   // SP points to new stack memory 
-
-  emit_addiu(FP, SP, 12 + (WORD_SIZE * parameter_count), str); // FP now points to the first parameter
 }
 
-void emit_method_suffix(ostream &str, int parameter_count)
+void emit_callee_restores(ostream &str)
 {
    emit_load(FP, 3, SP, str);
    emit_load(SELF, 2, SP, str);
    emit_load(RA, 1, SP, str);
-   int does_not_matter;
-   emit_stack_size_pop(3 + parameter_count, does_not_matter, str);
-
-   emit_return(str);
 }

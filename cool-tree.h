@@ -97,8 +97,9 @@ public:
    Symbol type;                                 
    Symbol get_type() { return type; }           
    Expression set_type(Symbol s) { type = s; return this; } 
-   virtual void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int) = 0; 
+   virtual void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&) const = 0; 
    virtual void dump_with_types(ostream&,int) = 0;  
+   virtual int get_number_of_locals() const = 0;
    void dump_type(ostream&, int);               
    Expression_class() { type = (Symbol) NULL; }	
 };
@@ -113,6 +114,7 @@ public:
    virtual Case copy_Case() = 0;
 
    virtual void dump_with_types(ostream& ,int) = 0;
+   virtual int get_number_of_locals() const = 0;
 };
 
 
@@ -201,6 +203,8 @@ public:
 
    void dump_with_types(ostream&,int);
    bool is_attr() { return false; };
+
+   int get_number_of_locals() const;
 };
 
 
@@ -259,6 +263,7 @@ public:
    void dump(ostream& stream, int n);
 
    void dump_with_types(ostream& ,int);
+   int get_number_of_locals() const override;
 };
 
 
@@ -275,8 +280,9 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&) const override;
    void dump_with_types(ostream&,int);
+   int get_number_of_locals() const override;
 };
 
 
@@ -297,8 +303,9 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&) const override;
    void dump_with_types(ostream&,int);
+   int get_number_of_locals() const override;
 };
 
 
@@ -317,8 +324,9 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&) const override;
    void dump_with_types(ostream&,int);
+   int get_number_of_locals() const override;
 };
 
 
@@ -337,8 +345,9 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&) const override;
    void dump_with_types(ostream&,int);
+   int get_number_of_locals() const override;
 };
 
 
@@ -355,8 +364,9 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&) const override;
    void dump_with_types(ostream&,int);
+   int get_number_of_locals() const override;
 };
 
 
@@ -373,8 +383,9 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&) const override;
    void dump_with_types(ostream&,int);
+   int get_number_of_locals() const override;
 };
 
 
@@ -389,8 +400,9 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&) const override;
    void dump_with_types(ostream&,int);
+   int get_number_of_locals() const override;
 };
 
 
@@ -411,8 +423,9 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&) const override;
    void dump_with_types(ostream&,int);
+   int get_number_of_locals() const override;
 };
 
 
@@ -429,8 +442,9 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&) const override;
    void dump_with_types(ostream&,int);
+   int get_number_of_locals() const override;
 };
 
 
@@ -447,8 +461,9 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&) const override;
    void dump_with_types(ostream&,int);
+   int get_number_of_locals() const override;
 };
 
 
@@ -465,8 +480,9 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&) const override;
    void dump_with_types(ostream&,int);
+   int get_number_of_locals() const override;
 };
 
 
@@ -483,8 +499,9 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&) const override;
    void dump_with_types(ostream&,int);
+   int get_number_of_locals() const override;
 };
 
 
@@ -499,8 +516,9 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&) const override;
    void dump_with_types(ostream&,int);
+   int get_number_of_locals() const override;
 };
 
 
@@ -517,8 +535,9 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&) const override;
    void dump_with_types(ostream&,int);
+   int get_number_of_locals() const override;
 };
 
 
@@ -535,8 +554,9 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&) const override;
    void dump_with_types(ostream&,int);
+   int get_number_of_locals() const override;
 };
 
 
@@ -553,8 +573,9 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&) const override;
    void dump_with_types(ostream&,int);
+   int get_number_of_locals() const override;
 };
 
 
@@ -569,8 +590,9 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&) const override;
    void dump_with_types(ostream&,int);
+   int get_number_of_locals() const override;
 };
 
 
@@ -585,8 +607,9 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&) const override;
    void dump_with_types(ostream&,int);
+   int get_number_of_locals() const override;
 };
 
 
@@ -601,8 +624,9 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&) const override;
    void dump_with_types(ostream&,int);
+   int get_number_of_locals() const override;
 };
 
 
@@ -617,8 +641,9 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&) const override;
    void dump_with_types(ostream&,int);
+   int get_number_of_locals() const override;
 };
 
 
@@ -633,8 +658,9 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&) const override;
    void dump_with_types(ostream&,int);
+   int get_number_of_locals() const override;
 };
 
 
@@ -649,8 +675,9 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&) const override;
    void dump_with_types(ostream&,int);
+   int get_number_of_locals() const override;
 };
 
 
@@ -663,8 +690,9 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&) const override;
    void dump_with_types(ostream&,int);
+   int get_number_of_locals() const override;
 };
 
 
@@ -679,8 +707,9 @@ public:
    Expression copy_Expression();
    void dump(ostream& stream, int n);
 
-   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&, int);
+   void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&) const override;
    void dump_with_types(ostream&,int);
+   int get_number_of_locals() const override;
 };
 
 

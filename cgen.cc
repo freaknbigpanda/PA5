@@ -581,7 +581,7 @@ void CgenClassTable::generate_init_ir()
         // Emit code for attribute initialization
         // Note: this will copy zero into ACC for no_expr_class
         SymbolTable<std::string, int> formal_table; // no method parameters for init methods so no need to populate the symbol table here with any offsets
-        attribute->init->code(str, current_node_ptr, formal_table, sp, 0);
+        attribute->init->code(str, current_node_ptr, formal_table, sp);
       }
 
       // Store the result of the attribute initialization in the correct location in the heap
@@ -592,7 +592,7 @@ void CgenClassTable::generate_init_ir()
     // $a0 is callee saved for the init methods so restore the value of self back to register $a0 before the method exits
     emit_move(ACC, SELF, str);
 
-    emit_method_suffix(str, 0);
+    emit_callee_restores(str);
     if (cgen_debug) cout << "sp after coding init method for class " << current_node_ptr->get_name()->get_string() << " is " << sp << endl;
   }
 }
@@ -606,7 +606,9 @@ void CgenClassTable::code_object_initializers()
     str << ":" << endl;
     
     int sp = 0;
-    emit_method_prefix(str, 0, sp);
+    emit_callee_saves(str, sp);
+
+    emit_addiu(FP, SP, 3 * WORD_SIZE, str); // FP now points to the first parameter
 
     // Save the value of self into register S0
     // note that init is *always* called after Object.copy which leaves a copy of the proto-object in ACC
@@ -648,7 +650,7 @@ void CgenClassTable::code_object_initializers()
         // Emit code for attribute initialization
         // Note: this will copy zero into ACC for no_expr_class
         SymbolTable<std::string, int> formal_table; // no method parameters for init methods so no need to populate the symbol table here with any offsets
-        attribute->init->code(str, current_node_ptr, formal_table, sp, 0);
+        attribute->init->code(str, current_node_ptr, formal_table, sp);
       }
 
       // Store the result of the attribute initialization in the correct location in the heap
@@ -659,7 +661,9 @@ void CgenClassTable::code_object_initializers()
     // $a0 is callee saved for the init methods so restore the value of self back to register $a0 before the method exits
     emit_move(ACC, SELF, str);
 
-    emit_method_suffix(str, 0);
+    emit_callee_restores(str);
+    emit_stack_size_pop(3, sp, str);
+    emit_return(str);
     if (cgen_debug) cout << "sp after coding init method for class " << current_node_ptr->get_name()->get_string() << " is " << sp << endl;
   }
 }
@@ -682,10 +686,12 @@ void CgenClassTable::code_object_methods()
       emit_method_ref(current_node_ptr->name, method->name, str);
       str << ":" << endl;
       
-      Formals parameters = method->formals;
       // emit code for the method body
+
       int sp = 0; // used to record the position of the stack pointer so we can find local variables
-      emit_method_prefix(str, parameters->len(), sp);
+      emit_callee_saves(str, sp);
+
+      emit_addiu(FP, SP, (3 * WORD_SIZE), str); // FP now points to the first parameter
 
       // Save the value of self, which is stored in ACC on method entry, into register S0
       emit_move(SELF, ACC, str);
@@ -695,17 +701,21 @@ void CgenClassTable::code_object_methods()
       formals_table.enterscope();
 
       // Add formal FP offset for all of the formal identifiers (aka method parameters)
-      for(int i = method->formals->first(); method->formals->more(i); i = method->formals->next(i))
+      Formals parameters = method->formals;
+      for(int i = parameters->first(); parameters->more(i); i = parameters->next(i))
       {
         // All of the formals will have already been pushed onto the stack by the dispatch call so we just need to set up the offset for the frame pointer here
         int* fp_offset = new int;
-        *fp_offset = i * -1;
+        *fp_offset = parameters->len() - i;
         formals_table.addid(method->formals->nth(i)->get_name()->get_string(), fp_offset);
       }
 
-      method->expr->code(str, current_node_ptr, formals_table, sp, parameters->len());
-
-      emit_method_suffix(str, parameters->len());
+      method->expr->code(str, current_node_ptr, formals_table, sp);
+      
+      emit_callee_restores(str);
+      emit_stack_size_pop(3 + parameters->len(), sp, str);
+      emit_return(str);
+      
       if (cgen_debug) cout << "sp after coding method " << method->name->get_string() << " for class " << current_node_ptr->get_name()->get_string() << " is " << sp << endl;
 
       formals_table.exitscope();

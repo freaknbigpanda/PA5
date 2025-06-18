@@ -171,6 +171,5 @@ void emit_store_int(char *source, char *dest, ostream& s);
 void emit_test_collector(ostream &s);
 void emit_gc_check(char *source, ostream &s);
 
-void emit_method_prefix(ostream &str, int parameter_count, int &sp);
-void emit_method_suffix(ostream &str, int parameter_count);
-// void emit_method_suffix(ostream &str, int parameter_count, int &sp);
+void emit_callee_saves(ostream &str, int &sp);
+void emit_callee_restores(ostream &str);

@@ -701,8 +701,8 @@ Expression object(Symbol name)
 //
 //*****************************************************************
 
-void assign_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp, int num_params) {
-   expr->code(s, cgen_node, formals_table, sp, num_params);
+void assign_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const {
+   expr->code(s, cgen_node, formals_table, sp);
    int* fp_offset = formals_table.lookup(name->get_string());
    int attribute_location = cgen_node->get_attribute_location(name);
    if (fp_offset != nullptr)
@@ -741,13 +741,13 @@ void emit_load_filename_and_line_number(ostream &s, Expression  expr, CgenNodeP 
 }
 
 void emit_dispatch(ostream &s, Expression expression, Symbol dispatch_type, Symbol method_name, Expressions parameters, CgenNodeP cgen_node, 
-SymbolTable<std::string, int> formals_table, int& sp, bool is_dynamic, int num_params)
+SymbolTable<std::string, int> formals_table, int& sp, bool is_dynamic)
 {
    // Push all of the parameters onto the stack
    for(int i = parameters->first(); parameters->more(i); i = parameters->next(i))
    {
       // Emit code for parameter expression
-      parameters->nth(i)->code(s, cgen_node, formals_table, sp, num_params);
+      parameters->nth(i)->code(s, cgen_node, formals_table, sp);
 
       // Copy the parameter to a new location on the heap as specified by cool operational semantics
       // todo: Doesn't seem to be needed because I fail a test with this not commented out
@@ -760,7 +760,7 @@ SymbolTable<std::string, int> formals_table, int& sp, bool is_dynamic, int num_p
    }
 
    // Emit the code for the self object we are dispatching to
-   expression->code(s, cgen_node, formals_table, sp, num_params);
+   expression->code(s, cgen_node, formals_table, sp);
 
    int continue_dispatch = label_index++;
 
@@ -806,20 +806,20 @@ SymbolTable<std::string, int> formals_table, int& sp, bool is_dynamic, int num_p
    emit_jalr(T0, sp, parameters->len(), s);
 }
 
-void static_dispatch_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp, int num_params) {
-   emit_dispatch(s, expr, type_name, name, actual, cgen_node, formals_table, sp, false, num_params);
+void static_dispatch_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const {
+   emit_dispatch(s, expr, type_name, name, actual, cgen_node, formals_table, sp, false);
 }
 
-void dispatch_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp, int num_params) {
-   emit_dispatch(s, expr, expr->type, name, actual, cgen_node, formals_table, sp, true, num_params);
+void dispatch_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const {
+   emit_dispatch(s, expr, expr->type, name, actual, cgen_node, formals_table, sp, true);
 }
 
-void cond_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp, int num_params) {
+void cond_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const {
    int else_label = label_index++;
    int exit_label = label_index++;
 
    // first emit the code to evaluate the predicate
-   pred->code(s, cgen_node, formals_table, sp, num_params);
+   pred->code(s, cgen_node, formals_table, sp);
 
    // after the predicate is evaluated we need to test to see if it is true or false
    // to do that we:
@@ -841,24 +841,24 @@ void cond_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, 
    // Jump to else if false
    emit_beq(ACC, ZERO, else_label, s);
    // evaluate the then block if true
-   then_exp->code(s, cgen_node, formals_table, sp, num_params);
+   then_exp->code(s, cgen_node, formals_table, sp);
    emit_jump(exit_label, s);
 
    emit_label_def(else_label, s);
    // evaluate else block if false
-   else_exp->code(s, cgen_node, formals_table, sp, num_params);
+   else_exp->code(s, cgen_node, formals_table, sp);
 
    emit_label_def(exit_label, s);
 }
 
-void loop_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp, int num_params) {
+void loop_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const {
    int exit_label = label_index++;
    int loop_label = label_index++;
    int evaluate_pred_label = label_index++;
 
    // first emit the code to evaluate the predicate
    emit_label_def(evaluate_pred_label, s);
-   pred->code(s, cgen_node, formals_table, sp, num_params);
+   pred->code(s, cgen_node, formals_table, sp);
 
    // after the predicate is evaluated we need to test to see if it is true or false
    // to do that we:
@@ -880,7 +880,7 @@ void loop_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, 
    emit_beq(ACC, ZERO, exit_label, s);
 
    emit_label_def(loop_label, s);
-   body->code(s, cgen_node, formals_table, sp, num_params);
+   body->code(s, cgen_node, formals_table, sp);
    emit_jump(evaluate_pred_label, s);
 
    emit_label_def(exit_label, s);
@@ -888,9 +888,9 @@ void loop_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, 
    emit_load_imm(ACC, 0, s);
 }
 
-void typcase_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp, int num_params) {
+void typcase_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const {
    // First emit code to generate the predicate
-   expr->code(s, cgen_node, formals_table, sp, num_params);
+   expr->code(s, cgen_node, formals_table, sp);
 
    int continue_case = label_index++;
 
@@ -991,11 +991,10 @@ void typcase_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::strin
 
       // Keep track of the case binding
       int* fp_offset = new int;
-      // todo: This is really gross, I need to figure out what the relationship is between sp, num_params, and the fp offset. I think I can simplify this 
-      *fp_offset = 1 + sp - num_params;
+      *fp_offset = 1 + sp;
       formals_table.addid(caseBranch->name->get_string(), fp_offset);
       
-      caseBranch->expr->code(s, cgen_node, formals_table, sp, num_params);
+      caseBranch->expr->code(s, cgen_node, formals_table, sp);
 
       formals_table.exitscope();
 
@@ -1015,14 +1014,14 @@ void typcase_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::strin
    emit_beq(T3, T4, "_case_abort", s);
 }
 
-void block_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp, int num_params) {
+void block_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const {
    for(int i = body->first(); body->more(i); i = body->next(i))
    {
-      body->nth(i)->code(s, cgen_node, formals_table, sp, num_params);
+      body->nth(i)->code(s, cgen_node, formals_table, sp);
    }
 }
 
-void let_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp, int num_params) {
+void let_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const {
    bool isBasic = (type_decl == Int || type_decl == Str || type_decl == Bool);
 
    // If the type is an Int or String and there is no expression, init with default proto-obj, otherwise emit code for the initialization expression
@@ -1041,7 +1040,7 @@ void let_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, i
    {
       // Emit code for let variable initialization
       // Note: this will copy zero into ACC for no_expr_class
-      init->code(s, cgen_node, formals_table, sp, num_params);
+      init->code(s, cgen_node, formals_table, sp);
    }
 
    // Push the result of the copy onto the stack
@@ -1053,11 +1052,11 @@ void let_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, i
    formals_table.enterscope();
 
    int* fp_offset = new int;
-   *fp_offset = 1 + sp - num_params;
+   *fp_offset = 1 + sp;
    formals_table.addid(identifier->get_string(), fp_offset);
 
    // Then evaluate the body of the let
-   body->code(s, cgen_node, formals_table, sp, num_params);
+   body->code(s, cgen_node, formals_table, sp);
 
    formals_table.exitscope();
 
@@ -1065,18 +1064,18 @@ void let_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, i
    emit_stack_size_pop(1, sp, s);
 }
 
-void emit_binary_op_prefix(Expression lhs, Expression rhs, ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int> formals_table, int& sp, int num_params)
+void emit_binary_op_prefix(Expression lhs, Expression rhs, ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int> formals_table, int& sp)
 {
   // This function assumes that Int objects will be present in register ACC after evaluating both lhs and rhs expressions
 
-  lhs->code(s, cgen_node, formals_table, sp, num_params);
+  lhs->code(s, cgen_node, formals_table, sp);
 
   // push lhs result to stack
   emit_store(ACC, 0, SP, s);
   // bump the stack pointer
   emit_stack_size_push(1, sp, s);
 
-  rhs->code(s, cgen_node, formals_table, sp, num_params);
+  rhs->code(s, cgen_node, formals_table, sp);
 
   // load the memory address of the object into T2
   emit_load(T2, 1, SP, s);
@@ -1119,9 +1118,9 @@ void emit_binary_op_suffix(Symbol return_type, ostream &s, int& sp)
   emit_stack_size_pop(1, sp, s);
 }
 
-void plus_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp, int num_params)
+void plus_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const
 {
-  emit_binary_op_prefix(e1, e2, s, cgen_node, formals_table, sp, num_params);
+  emit_binary_op_prefix(e1, e2, s, cgen_node, formals_table, sp);
 
   // add T1 + T2
   emit_add(T2, T1, T2, s);
@@ -1129,9 +1128,9 @@ void plus_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, 
   emit_binary_op_suffix(Int, s, sp);
 }
 
-void sub_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp, int num_params)
+void sub_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const
 {
-  emit_binary_op_prefix(e1, e2, s, cgen_node, formals_table, sp, num_params);
+  emit_binary_op_prefix(e1, e2, s, cgen_node, formals_table, sp);
 
   // sub T1 - T2
   emit_sub(T2, T1, T2, s);
@@ -1139,9 +1138,9 @@ void sub_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, i
   emit_binary_op_suffix(Int, s, sp);
 }
 
-void mul_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp, int num_params)
+void mul_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const
 {
-  emit_binary_op_prefix(e1, e2, s, cgen_node, formals_table, sp, num_params);
+  emit_binary_op_prefix(e1, e2, s, cgen_node, formals_table, sp);
 
   // mul T1 * T2
   emit_mul(T2, T1, T2, s);
@@ -1149,9 +1148,9 @@ void mul_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, i
   emit_binary_op_suffix(Int, s, sp);
 }
 
-void divide_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp, int num_params)
+void divide_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const
 {
-  emit_binary_op_prefix(e1, e2, s, cgen_node, formals_table, sp, num_params);
+  emit_binary_op_prefix(e1, e2, s, cgen_node, formals_table, sp);
 
   // mul T1 / T2
   emit_div(T2, T1, T2, s);
@@ -1159,9 +1158,9 @@ void divide_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string
   emit_binary_op_suffix(Int, s, sp);
 }
 
-void neg_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp, int num_params)
+void neg_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const
 {
-    e1->code(s, cgen_node, formals_table, sp, num_params);
+    e1->code(s, cgen_node, formals_table, sp);
 
     // Load the int value into ACC
     emit_load(ACC, 3, ACC, s);
@@ -1176,9 +1175,9 @@ void neg_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, i
     emit_object_allocation(Int, s, sp);
 }
 
-void lt_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp, int num_params)
+void lt_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const
 {
-   emit_binary_op_prefix(e1, e2, s, cgen_node, formals_table, sp, num_params);
+   emit_binary_op_prefix(e1, e2, s, cgen_node, formals_table, sp);
    int true_branch_label = label_index++;
    int false_branch_label = label_index++;
 
@@ -1192,9 +1191,9 @@ void lt_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, in
    emit_binary_op_suffix(Bool, s, sp);
 }
 
-void leq_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp, int num_params)
+void leq_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const
 {
-   emit_binary_op_prefix(e1, e2, s, cgen_node, formals_table, sp, num_params);
+   emit_binary_op_prefix(e1, e2, s, cgen_node, formals_table, sp);
    int true_branch_label = label_index++;
    int false_branch_label = label_index++;
 
@@ -1208,14 +1207,14 @@ void leq_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, i
    emit_binary_op_suffix(Bool, s, sp);
 }
 
-void eq_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp, int num_params)
+void eq_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const
 {
-  e1->code(s, cgen_node, formals_table, sp, num_params);
+  e1->code(s, cgen_node, formals_table, sp);
   // Push result of LHS onto the stack
   emit_store(ACC, 0, SP, s);
   emit_stack_size_push(1, sp, s);
 
-  e2->code(s, cgen_node, formals_table, sp, num_params);
+  e2->code(s, cgen_node, formals_table, sp);
   // move RHS into T2
   emit_move(T2, ACC, s);
   // load LHS into T1
@@ -1241,12 +1240,12 @@ void eq_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, in
 }
 
 // Note: this is actually the not operator. No idea why it is called comp
-void comp_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp, int num_params)
+void comp_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const
 {
    int false_label = label_index++;
    int true_label = label_index++;
    // this produces a bool value in acc
-   e1->code(s, cgen_node, formals_table, sp, num_params);
+   e1->code(s, cgen_node, formals_table, sp);
 
    // Load the bool value into ACC
    emit_load(ACC, 3, ACC, s);
@@ -1266,7 +1265,7 @@ void comp_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, 
    emit_label_def(one_label, s);
 }
 
-void int_const_class::code(ostream& s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int&, int)
+void int_const_class::code(ostream& s, CgenNodeP cgen_node, SymbolTable<std::string, int>&, int&) const
 {
   //
   // Need to be sure we have an IntEntry *, not an arbitrary Symbol
@@ -1274,17 +1273,17 @@ void int_const_class::code(ostream& s, CgenNodeP cgen_node, SymbolTable<std::str
   emit_load_int(ACC,inttable.lookup_string(token->get_string()),s);
 }
 
-void string_const_class::code(ostream& s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int&, int)
+void string_const_class::code(ostream& s, CgenNodeP cgen_node, SymbolTable<std::string, int>&, int&) const
 {
   emit_load_string(ACC,stringtable.lookup_string(token->get_string()),s);
 }
 
-void bool_const_class::code(ostream& s, CgenNodeP cgen_node,  SymbolTable<std::string, int>& formals_table, int&, int)
+void bool_const_class::code(ostream& s, CgenNodeP cgen_node,  SymbolTable<std::string, int>&, int&) const
 {
   emit_load_bool(ACC, BoolConst(val), s);
 }
 
-void new__class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp, int num_params)
+void new__class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>&, int& sp) const
 {
    if (type_name == SELF_TYPE)
    {
@@ -1343,9 +1342,9 @@ void new__class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, 
    }
 }
 
-void isvoid_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp, int num_params)
+void isvoid_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const
 {
-  e1->code(s, cgen_node, formals_table, sp, num_params);
+  e1->code(s, cgen_node, formals_table, sp);
 
   int zero_label = label_index++;
   int one_label = label_index++;
@@ -1358,13 +1357,13 @@ void isvoid_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string
   emit_label_def(one_label, s);
 }
 
-void no_expr_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp, int num_params)
+void no_expr_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const
 {
   // Load void into ACC for no_expr
   emit_load_imm(ACC, 0, s);
 }
 
-void object_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp, int num_params)
+void object_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const
 {
    if (name == self) 
    {
@@ -1383,4 +1382,132 @@ void object_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string
       assert(attribute_location != -1);
       emit_load(ACC, 3 + attribute_location, SELF, s);
    }
+}
+
+
+//
+// Polymorphic virtual functions for each nodes to define.
+//
+
+int branch_class::get_number_of_locals() const {
+  return 1 + expr->get_number_of_locals();
+}
+
+int method_class::get_number_of_locals() const {
+  // Formals are not counted as locals.
+  return expr->get_number_of_locals();
+}
+
+int assign_class::get_number_of_locals() const {
+  return expr->get_number_of_locals();
+}
+
+int static_dispatch_class::get_number_of_locals() const {
+  int number_of_locals = expr->get_number_of_locals();
+  for (int i = actual->first(); actual->more(i); i = actual->next(i)) {
+    number_of_locals = std::max(number_of_locals, actual->nth(i)->get_number_of_locals());
+  }
+  return number_of_locals;
+}
+
+int dispatch_class::get_number_of_locals() const {
+  int number_of_locals = expr->get_number_of_locals();
+  for (int i = actual->first(); actual->more(i); i = actual->next(i)) {
+    number_of_locals = std::max(number_of_locals, actual->nth(i)->get_number_of_locals());
+  }
+  return number_of_locals;
+}
+
+int cond_class::get_number_of_locals() const {
+  return std::max(pred->get_number_of_locals(),
+                  std::max(then_exp->get_number_of_locals(),
+                           else_exp->get_number_of_locals()));
+}
+
+int loop_class::get_number_of_locals() const {
+  return std::max(pred->get_number_of_locals(), body->get_number_of_locals());
+}
+
+int typcase_class::get_number_of_locals() const {
+  int number_of_locals = expr->get_number_of_locals();
+  for (int i = cases->first(); cases->more(i); i = cases->next(i)) {
+    number_of_locals = std::max(number_of_locals, cases->nth(i)->get_number_of_locals());
+  }
+  return number_of_locals;
+}
+
+int block_class::get_number_of_locals() const {
+  int number_of_locals = 0;
+  for (int i = body->first(); body->more(i); i = body->next(i)) {
+    number_of_locals = std::max(number_of_locals, body->nth(i)->get_number_of_locals());
+  }
+  return number_of_locals;
+}
+
+int let_class::get_number_of_locals() const {
+  return 1 + body->get_number_of_locals();
+}
+
+int plus_class::get_number_of_locals() const {
+  return std::max(e1->get_number_of_locals(), e2->get_number_of_locals());
+}
+
+int sub_class::get_number_of_locals() const {
+  return std::max(e1->get_number_of_locals(), e2->get_number_of_locals());
+}
+
+int mul_class::get_number_of_locals() const {
+  return std::max(e1->get_number_of_locals(), e2->get_number_of_locals());
+}
+
+int divide_class::get_number_of_locals() const {
+  return std::max(e1->get_number_of_locals(), e2->get_number_of_locals());
+}
+
+int neg_class::get_number_of_locals() const {
+  return e1->get_number_of_locals();
+}
+
+int lt_class::get_number_of_locals() const {
+  return std::max(e1->get_number_of_locals(), e2->get_number_of_locals());
+}
+
+int eq_class::get_number_of_locals() const {
+  return std::max(e1->get_number_of_locals(), e2->get_number_of_locals());
+}
+
+int leq_class::get_number_of_locals() const {
+  return std::max(e1->get_number_of_locals(), e2->get_number_of_locals());
+}
+
+int comp_class::get_number_of_locals() const {
+  return e1->get_number_of_locals();
+}
+
+int int_const_class::get_number_of_locals() const {
+  return 0;
+}
+
+int string_const_class::get_number_of_locals() const {
+  return 0;
+}
+
+int bool_const_class::get_number_of_locals() const {
+  return 0;
+}
+
+int new__class::get_number_of_locals() const {
+  return 0;
+}
+
+int isvoid_class::get_number_of_locals() const {
+  return e1->get_number_of_locals();
+}
+
+int no_expr_class::get_number_of_locals() const {
+  return 0;
+}
+
+int object_class::get_number_of_locals() const {
+  return 0;
 }
