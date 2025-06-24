@@ -701,8 +701,8 @@ Expression object(Symbol name)
 //
 //*****************************************************************
 
-void assign_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const {
-   expr->code(s, cgen_node, formals_table, sp);
+void assign_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const {
+   expr->code(s, cgen_node, formals_table, local_index);
    int* fp_offset = formals_table.lookup(name->get_string());
    int attribute_location = cgen_node->get_attribute_location(name);
    if (fp_offset != nullptr)
@@ -717,7 +717,7 @@ void assign_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string
       if (cgen_Memmgr != GC_NOGC)
       {
          emit_addiu(A1, SELF, (3 + attribute_location) * WORD_SIZE, s);
-         emit_jal("_GenGC_Assign", sp, 0, s);
+         emit_jal("_GenGC_Assign", s);
       }
    }
    else
@@ -741,26 +741,26 @@ void emit_load_filename_and_line_number(ostream &s, Expression  expr, CgenNodeP 
 }
 
 void emit_dispatch(ostream &s, Expression expression, Symbol dispatch_type, Symbol method_name, Expressions parameters, CgenNodeP cgen_node, 
-SymbolTable<std::string, int> formals_table, int& sp, bool is_dynamic)
+SymbolTable<std::string, int> formals_table, int& local_index, bool is_dynamic)
 {
    // Push all of the parameters onto the stack
    for(int i = parameters->first(); parameters->more(i); i = parameters->next(i))
    {
       // Emit code for parameter expression
-      parameters->nth(i)->code(s, cgen_node, formals_table, sp);
+      parameters->nth(i)->code(s, cgen_node, formals_table, local_index);
 
       // Copy the parameter to a new location on the heap as specified by cool operational semantics
       // todo: Doesn't seem to be needed because I fail a test with this not commented out
       // emit_object_copy(s);
 
       emit_store(ACC, 0, SP, s);
-
+      
       // bump the stack pointer
-      emit_stack_size_push(1, sp, s); 
+      emit_stack_size_push(1, s);
    }
 
    // Emit the code for the self object we are dispatching to
-   expression->code(s, cgen_node, formals_table, sp);
+   expression->code(s, cgen_node, formals_table, local_index);
 
    int continue_dispatch = label_index++;
 
@@ -803,23 +803,23 @@ SymbolTable<std::string, int> formals_table, int& sp, bool is_dynamic)
    emit_load(T0, 0, T0, s);
 
    // Jal to the method definition
-   emit_jalr(T0, sp, parameters->len(), s);
+   emit_jalr(T0, s);
 }
 
-void static_dispatch_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const {
-   emit_dispatch(s, expr, type_name, name, actual, cgen_node, formals_table, sp, false);
+void static_dispatch_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const {
+   emit_dispatch(s, expr, type_name, name, actual, cgen_node, formals_table, local_index, false);
 }
 
-void dispatch_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const {
-   emit_dispatch(s, expr, expr->type, name, actual, cgen_node, formals_table, sp, true);
+void dispatch_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const {
+   emit_dispatch(s, expr, expr->type, name, actual, cgen_node, formals_table, local_index, true);
 }
 
-void cond_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const {
+void cond_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const {
    int else_label = label_index++;
    int exit_label = label_index++;
 
    // first emit the code to evaluate the predicate
-   pred->code(s, cgen_node, formals_table, sp);
+   pred->code(s, cgen_node, formals_table, local_index);
 
    // after the predicate is evaluated we need to test to see if it is true or false
    // to do that we:
@@ -836,29 +836,29 @@ void cond_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, 
    emit_load_imm(A1, 0, s);
 
    // Jump and link to the compare method to test the predicate result
-   emit_jal("equality_test", sp, 0, s);
+   emit_jal("equality_test", s);
 
    // Jump to else if false
    emit_beq(ACC, ZERO, else_label, s);
    // evaluate the then block if true
-   then_exp->code(s, cgen_node, formals_table, sp);
+   then_exp->code(s, cgen_node, formals_table, local_index);
    emit_jump(exit_label, s);
 
    emit_label_def(else_label, s);
    // evaluate else block if false
-   else_exp->code(s, cgen_node, formals_table, sp);
+   else_exp->code(s, cgen_node, formals_table, local_index);
 
    emit_label_def(exit_label, s);
 }
 
-void loop_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const {
+void loop_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const {
    int exit_label = label_index++;
    int loop_label = label_index++;
    int evaluate_pred_label = label_index++;
 
    // first emit the code to evaluate the predicate
    emit_label_def(evaluate_pred_label, s);
-   pred->code(s, cgen_node, formals_table, sp);
+   pred->code(s, cgen_node, formals_table, local_index);
 
    // after the predicate is evaluated we need to test to see if it is true or false
    // to do that we:
@@ -875,12 +875,12 @@ void loop_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, 
    emit_load_imm(A1, 0, s);
 
    // Jump and link to the compare method to test the predicate result
-   emit_jal("equality_test", sp, 0, s);
+   emit_jal("equality_test", s);
 
    emit_beq(ACC, ZERO, exit_label, s);
 
    emit_label_def(loop_label, s);
-   body->code(s, cgen_node, formals_table, sp);
+   body->code(s, cgen_node, formals_table, local_index);
    emit_jump(evaluate_pred_label, s);
 
    emit_label_def(exit_label, s);
@@ -888,9 +888,9 @@ void loop_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, 
    emit_load_imm(ACC, 0, s);
 }
 
-void typcase_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const {
+void typcase_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const {
    // First emit code to generate the predicate
-   expr->code(s, cgen_node, formals_table, sp);
+   expr->code(s, cgen_node, formals_table, local_index);
 
    int continue_case = label_index++;
 
@@ -981,25 +981,25 @@ void typcase_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::strin
       // add the case statement definition to the scope
 
       // Push the result of the case predicate evaluation onto the stack so that the case body expression can access it
-      emit_store(ACC, 0, SP, s);
+      emit_store(ACC, -1*local_index, FP, s);
 
-      // bump the stack pointer
-      emit_stack_size_push(1, sp, s);
+      // increase the local index which we will use to calculate the fp offset for the case variable
+      local_index++;
 
       // code gen for the case statement branch
       formals_table.enterscope();
 
       // Keep track of the case binding
       int* fp_offset = new int;
-      *fp_offset = 1 + sp;
+      *fp_offset = (local_index - 1) * -1;
       formals_table.addid(caseBranch->name->get_string(), fp_offset);
       
-      caseBranch->expr->code(s, cgen_node, formals_table, sp);
+      caseBranch->expr->code(s, cgen_node, formals_table, local_index);
 
       formals_table.exitscope();
 
-      // Restore the stack pointer
-      emit_stack_size_pop(1, sp, s);
+      // Decrease the local index since we have exited the case variable scope
+      local_index--;
 
       // Jump out of the case expression
       emit_jump(case_finished_label, s);
@@ -1014,14 +1014,14 @@ void typcase_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::strin
    emit_beq(T3, T4, "_case_abort", s);
 }
 
-void block_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const {
+void block_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const {
    for(int i = body->first(); body->more(i); i = body->next(i))
    {
-      body->nth(i)->code(s, cgen_node, formals_table, sp);
+      body->nth(i)->code(s, cgen_node, formals_table, local_index);
    }
 }
 
-void let_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const {
+void let_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const {
    bool isBasic = (type_decl == Int || type_decl == Str || type_decl == Bool);
 
    // If the type is an Int or String and there is no expression, init with default proto-obj, otherwise emit code for the initialization expression
@@ -1040,42 +1040,42 @@ void let_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, i
    {
       // Emit code for let variable initialization
       // Note: this will copy zero into ACC for no_expr_class
-      init->code(s, cgen_node, formals_table, sp);
+      init->code(s, cgen_node, formals_table, local_index);
    }
 
    // Push the result of the copy onto the stack
-   emit_store(ACC, 0, SP, s);
+   emit_store(ACC, -1 * local_index, FP, s);
 
-   // bump the stack pointer
-   emit_stack_size_push(1, sp, s);
+   // increase the local index which we will use to calculate the fp offset for the let variable
+   local_index++;
 
    formals_table.enterscope();
 
    int* fp_offset = new int;
-   *fp_offset = 1 + sp;
+   *fp_offset = (local_index - 1) * -1;
    formals_table.addid(identifier->get_string(), fp_offset);
 
    // Then evaluate the body of the let
-   body->code(s, cgen_node, formals_table, sp);
+   body->code(s, cgen_node, formals_table, local_index);
 
    formals_table.exitscope();
 
-   // Restore the stack pointer
-   emit_stack_size_pop(1, sp, s);
+   // Decrease the local index since we have exited the let variable scope
+   local_index--;
 }
 
-void emit_binary_op_prefix(Expression lhs, Expression rhs, ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int> formals_table, int& sp)
+void emit_binary_op_prefix(Expression lhs, Expression rhs, ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int> formals_table,int& local_index)
 {
   // This function assumes that Int objects will be present in register ACC after evaluating both lhs and rhs expressions
 
-  lhs->code(s, cgen_node, formals_table, sp);
+  lhs->code(s, cgen_node, formals_table, local_index);
 
   // push lhs result to stack
   emit_store(ACC, 0, SP, s);
   // bump the stack pointer
-  emit_stack_size_push(1, sp, s);
+  emit_stack_size_push(1, s);
 
-  rhs->code(s, cgen_node, formals_table, sp);
+  rhs->code(s, cgen_node, formals_table, local_index);
 
   // load the memory address of the object into T2
   emit_load(T2, 1, SP, s);
@@ -1089,7 +1089,7 @@ void emit_binary_op_prefix(Expression lhs, Expression rhs, ostream &s, CgenNodeP
   //T1 now stores the lhs int operand and T2 now stores the rhs int operand-
 }
 
-void emit_object_allocation(Symbol return_type, ostream &s , int& sp)
+void emit_object_allocation(Symbol return_type, ostream &s)
 {
   /* Create a new return object on the heap, populate its data field with the value in ACC, and populate ACC with a pointer to that object
       Note: Expects the raw result of the operand to be in register T2 */
@@ -1109,58 +1109,58 @@ void emit_object_allocation(Symbol return_type, ostream &s , int& sp)
 // todo: Why do the results of expressions get allocated on the heap? How does that make any sense?
 // Why couldn't we allocate the result of expressions on the stack?
 
-void emit_binary_op_suffix(Symbol return_type, ostream &s, int& sp)
+void emit_binary_op_suffix(Symbol return_type, ostream &s)
 {
   // For bools we don't need to allocate a new object
-  if (return_type == Int) emit_object_allocation(return_type, s, sp);
+  if (return_type == Int) emit_object_allocation(return_type, s);
 
   // return the stack pointer to its previous value
-  emit_stack_size_pop(1, sp, s);
+  emit_stack_size_pop(1, s);
 }
 
-void plus_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const
+void plus_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
 {
-  emit_binary_op_prefix(e1, e2, s, cgen_node, formals_table, sp);
+  emit_binary_op_prefix(e1, e2, s, cgen_node, formals_table, local_index);
 
   // add T1 + T2
   emit_add(T2, T1, T2, s);
 
-  emit_binary_op_suffix(Int, s, sp);
+  emit_binary_op_suffix(Int, s);
 }
 
-void sub_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const
+void sub_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
 {
-  emit_binary_op_prefix(e1, e2, s, cgen_node, formals_table, sp);
+  emit_binary_op_prefix(e1, e2, s, cgen_node, formals_table, local_index);
 
   // sub T1 - T2
   emit_sub(T2, T1, T2, s);
 
-  emit_binary_op_suffix(Int, s, sp);
+  emit_binary_op_suffix(Int, s);
 }
 
-void mul_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const
+void mul_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
 {
-  emit_binary_op_prefix(e1, e2, s, cgen_node, formals_table, sp);
+  emit_binary_op_prefix(e1, e2, s, cgen_node, formals_table, local_index);
 
   // mul T1 * T2
   emit_mul(T2, T1, T2, s);
 
-  emit_binary_op_suffix(Int, s, sp);
+  emit_binary_op_suffix(Int, s);
 }
 
-void divide_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const
+void divide_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
 {
-  emit_binary_op_prefix(e1, e2, s, cgen_node, formals_table, sp);
+  emit_binary_op_prefix(e1, e2, s, cgen_node, formals_table, local_index);
 
   // mul T1 / T2
   emit_div(T2, T1, T2, s);
 
-  emit_binary_op_suffix(Int, s, sp);
+  emit_binary_op_suffix(Int, s);
 }
 
-void neg_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const
+void neg_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
 {
-    e1->code(s, cgen_node, formals_table, sp);
+    e1->code(s, cgen_node, formals_table, local_index);
 
     // Load the int value into ACC
     emit_load(ACC, 3, ACC, s);
@@ -1172,12 +1172,12 @@ void neg_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, i
     emit_mul(T2, ACC, T1, s);
 
     // Create a new Int object on the heap and store the value of T2 in it
-    emit_object_allocation(Int, s, sp);
+    emit_object_allocation(Int, s);
 }
 
-void lt_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const
+void lt_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
 {
-   emit_binary_op_prefix(e1, e2, s, cgen_node, formals_table, sp);
+   emit_binary_op_prefix(e1, e2, s, cgen_node, formals_table, local_index);
    int true_branch_label = label_index++;
    int false_branch_label = label_index++;
 
@@ -1188,12 +1188,12 @@ void lt_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, in
    emit_load_bool(ACC, BoolConst(1), s);
    emit_label_def(false_branch_label, s);
 
-   emit_binary_op_suffix(Bool, s, sp);
+   emit_binary_op_suffix(Bool, s);
 }
 
-void leq_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const
+void leq_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
 {
-   emit_binary_op_prefix(e1, e2, s, cgen_node, formals_table, sp);
+   emit_binary_op_prefix(e1, e2, s, cgen_node, formals_table, local_index);
    int true_branch_label = label_index++;
    int false_branch_label = label_index++;
 
@@ -1204,17 +1204,17 @@ void leq_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, i
    emit_load_bool(ACC, BoolConst(1), s);
    emit_label_def(false_branch_label, s);
 
-   emit_binary_op_suffix(Bool, s, sp);
+   emit_binary_op_suffix(Bool, s);
 }
 
-void eq_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const
+void eq_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
 {
-  e1->code(s, cgen_node, formals_table, sp);
+  e1->code(s, cgen_node, formals_table, local_index);
   // Push result of LHS onto the stack
   emit_store(ACC, 0, SP, s);
-  emit_stack_size_push(1, sp, s);
+  emit_stack_size_push(1, s);
 
-  e2->code(s, cgen_node, formals_table, sp);
+  e2->code(s, cgen_node, formals_table, local_index);
   // move RHS into T2
   emit_move(T2, ACC, s);
   // load LHS into T1
@@ -1232,20 +1232,20 @@ void eq_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, in
   emit_load_bool(A1, BoolConst(0), s);
 
   // Jump and link to the compare method
-  emit_jal("equality_test", sp, 0, s);
+  emit_jal("equality_test", s);
 
   emit_label_def(pointers_are_equal, s);
   // Restore the stack pointer
-  emit_stack_size_pop(1, sp, s);
+  emit_stack_size_pop(1, s);
 }
 
 // Note: this is actually the not operator. No idea why it is called comp
-void comp_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const
+void comp_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
 {
    int false_label = label_index++;
    int true_label = label_index++;
    // this produces a bool value in acc
-   e1->code(s, cgen_node, formals_table, sp);
+   e1->code(s, cgen_node, formals_table, local_index);
 
    // Load the bool value into ACC
    emit_load(ACC, 3, ACC, s);
@@ -1283,7 +1283,7 @@ void bool_const_class::code(ostream& s, CgenNodeP cgen_node,  SymbolTable<std::s
   emit_load_bool(ACC, BoolConst(val), s);
 }
 
-void new__class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>&, int& sp) const
+void new__class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>&,int& local_index) const
 {
    if (type_name == SELF_TYPE)
    {
@@ -1311,7 +1311,7 @@ void new__class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, 
       
       // Push the value onto the stack for later retrieval
       emit_store(T1, 0, SP, s);
-      emit_stack_size_push(1, sp, s);
+      emit_stack_size_push(1, s);
    }
    else
    {
@@ -1328,23 +1328,23 @@ void new__class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, 
    {
       // load the address of the init method from the stack
       emit_load(T1, 1, SP, s);
-      emit_stack_size_pop(1, sp, s);
+      emit_stack_size_pop(1, s);
 
       // jump to init method
-      emit_jalr(T1, sp, 0, s);
+      emit_jalr(T1, s);
    }
    else
    {
       // Invoke initialization method on the object that we just allocated
       std::stringstream init_method_ref;
       emit_init_ref(type_name, init_method_ref);
-      emit_jal(init_method_ref.str().c_str(), sp, 0, s);
+      emit_jal(init_method_ref.str().c_str(), s);
    }
 }
 
-void isvoid_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const
+void isvoid_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
 {
-  e1->code(s, cgen_node, formals_table, sp);
+  e1->code(s, cgen_node, formals_table, local_index);
 
   int zero_label = label_index++;
   int one_label = label_index++;
@@ -1357,13 +1357,13 @@ void isvoid_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string
   emit_label_def(one_label, s);
 }
 
-void no_expr_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const
+void no_expr_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
 {
   // Load void into ACC for no_expr
   emit_load_imm(ACC, 0, s);
 }
 
-void object_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& sp) const
+void object_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
 {
    if (name == self) 
    {

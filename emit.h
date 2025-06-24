@@ -15,7 +15,7 @@
 #include "stringtab.h"
 
 #define MAXINT  100000000    
-#define WORD_SIZE    4
+#define WORD_SIZE    4  // size of a word in bytes 
 #define LOG_WORD_SIZE 2     // for logical shifts
 
 // Global names
@@ -134,16 +134,16 @@ void emit_and(const char *dest, const char *src1, const char *src2, ostream& s);
 void emit_ori(const char *dest, const char *src1, int imm, ostream& s);
 void emit_addu(const char *dest, const char *src1, const char *src2, ostream& s);
 void emit_addiu(const char *dest, const char *src1, int imm, ostream& s);
-void emit_stack_size_pop(int num_words, int& sp, ostream &s);
-void emit_stack_size_push(int num_words, int& sp, ostream &s);
+void emit_stack_size_pop(int num_words, ostream &s);
+void emit_stack_size_push(int num_words, ostream &s);
 void emit_div(const char *dest, const char *src1, const char *src2, ostream &s);
 void emit_mul(const char *dest, const char *src1, const char *src2, ostream& s);
 void emit_sub(const char *dest, const char *src1, const char *src2, ostream& s);
 void emit_sll(const char *dest, const char *src1, int num, ostream& s);
 void emit_slt(const char *cmp_result, const char *lhs, const char *rhs, ostream& s);
 void emit_slti(const char *cmp_result, const char *lhs, int imm, ostream& s);
-void emit_jalr(const char *dest, int& sp, int num_params, ostream& s);
-void emit_jal(const char *address, int& sp, int num_params, ostream &s);
+void emit_jalr(const char *dest, ostream& s);
+void emit_jal(const char *address, ostream &s);
 void emit_object_copy(ostream &s);
 void emit_return(ostream& s);
 void emit_gc_assign(ostream& s);
@@ -171,5 +171,6 @@ void emit_store_int(char *source, char *dest, ostream& s);
 void emit_test_collector(ostream &s);
 void emit_gc_check(char *source, ostream &s);
 
-void emit_callee_saves(ostream &str, int &sp);
-void emit_callee_restores(ostream &str);
+#define CALLEE_SAVES_SIZE 3 // Number of callee saves we do in words
+void emit_callee_saves(ostream &str);
+void emit_callee_restores(ostream &str, int num_params);

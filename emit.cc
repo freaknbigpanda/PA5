@@ -82,11 +82,11 @@ void emit_addu(const char *dest, const char *src1, const char *src2, ostream& s)
 void emit_addiu(const char *dest, const char *src1, int imm, ostream& s)
 { s << ADDIU << dest << " " << src1 << " " << imm << endl; }
 
-void emit_stack_size_push(int num_words, int& sp, ostream& s)
-{ emit_addiu(SP, SP, -1 * num_words * WORD_SIZE, s); sp -= num_words; }
+void emit_stack_size_push(int num_words, ostream& s)
+{ emit_addiu(SP, SP, -1 * num_words * WORD_SIZE, s); }
 
-void emit_stack_size_pop(int num_words, int& sp, ostream& s)
-{ emit_addiu(SP, SP, num_words * WORD_SIZE, s); sp += num_words; }
+void emit_stack_size_pop(int num_words, ostream& s)
+{ emit_addiu(SP, SP, num_words * WORD_SIZE, s); }
 
 void emit_div(const char *dest, const char *src1, const char *src2, ostream& s)
 { s << DIV << dest << " " << src1 << " " << src2 << endl; }
@@ -106,23 +106,11 @@ void emit_slt(const char *cmp_result, const char *lhs, const char *rhs, ostream&
 void emit_slti(const char *cmp_result, const char *lhs, int imm, ostream& s)
 { s << SLTI << cmp_result << " " << lhs << " " << imm << endl; }
 
-void emit_jalr(const char *dest, int &sp, int num_params, ostream &s)
-{
-  s << JALR << "\t" << dest << endl;
-  sp += num_params;
-}
+void emit_jalr(const char *dest, ostream &s) { s << JALR << "\t" << dest << endl; }
 
-void emit_jal(const char *address, int &sp, int num_params, ostream &s)
-{ 
-  s << JAL << address << endl; 
-  sp += num_params;
-}
+void emit_jal(const char *address, ostream &s) { s << JAL << address << endl; }
 
-void emit_object_copy(ostream &s)
-{
-  int does_not_matter;
-  emit_jal("Object.copy", does_not_matter, 0, s);
-}
+void emit_object_copy(ostream &s) { emit_jal("Object.copy", s); }
 
 void emit_return(ostream& s)
 { s << RET << endl; }
@@ -268,21 +256,24 @@ void emit_gc_check(char *source, ostream &s)
   s << JAL << "_gc_check" << endl;
 }
 
-void emit_callee_saves(ostream &str, int& sp) 
+void emit_callee_saves(ostream &str) 
 {
   // Grow the stack 12 bytes for 3 words worth of shit sp == 0
-  emit_stack_size_push(3, sp, str); // SP = -3
+  emit_stack_size_push(CALLEE_SAVES_SIZE, str); // SP = -3
   // Preserve all of the registers we have to for a function call
   // Note: if we use more of the $sx registers we will need to add more instructions here and in the method_suffix function to save them
   emit_store(FP, 3, SP, str); // Store at SP = 0
   emit_store(SELF, 2, SP, str); // Store at SP = -1
   emit_store(RA, 1, SP, str); // Store at SP = -2
   // SP points to new stack memory 
+  emit_addiu(FP, SP, CALLEE_SAVES_SIZE * WORD_SIZE, str); // FP now points to the first parameter
 }
 
-void emit_callee_restores(ostream &str)
+void emit_callee_restores(ostream &str, int num_params)
 {
-   emit_load(FP, 3, SP, str);
-   emit_load(SELF, 2, SP, str);
-   emit_load(RA, 1, SP, str);
+  emit_load(FP, 3, SP, str);
+  emit_load(SELF, 2, SP, str);
+  emit_load(RA, 1, SP, str);
+  emit_stack_size_pop(CALLEE_SAVES_SIZE + num_params, str);
+  emit_return(str);
 }

@@ -97,7 +97,7 @@ public:
    Symbol type;                                 
    Symbol get_type() { return type; }           
    Expression set_type(Symbol s) { type = s; return this; } 
-   virtual void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int&) const = 0; 
+   virtual void code(ostream&, CgenNode*, SymbolTable<std::string, int>&, int& local_index) const = 0; 
    virtual void dump_with_types(ostream&,int) = 0;  
    virtual int get_number_of_locals() const = 0;
    void dump_type(ostream&, int);               

@@ -592,8 +592,7 @@ void CgenClassTable::generate_init_ir()
     // $a0 is callee saved for the init methods so restore the value of self back to register $a0 before the method exits
     emit_move(ACC, SELF, str);
 
-    emit_callee_restores(str);
-    if (cgen_debug) cout << "sp after coding init method for class " << current_node_ptr->get_name()->get_string() << " is " << sp << endl;
+    emit_callee_restores(str, 0);
   }
 }
 
@@ -605,10 +604,7 @@ void CgenClassTable::code_object_initializers()
     emit_init_ref(current_node_ptr->name, str);
     str << ":" << endl;
     
-    int sp = 0;
-    emit_callee_saves(str, sp);
-
-    emit_addiu(FP, SP, 3 * WORD_SIZE, str); // FP now points to the first parameter
+    emit_callee_saves(str);
 
     // Save the value of self into register S0
     // note that init is *always* called after Object.copy which leaves a copy of the proto-object in ACC
@@ -618,7 +614,7 @@ void CgenClassTable::code_object_initializers()
     {
       std::stringstream init_ref;
       emit_init_ref(current_node_ptr->parent, init_ref);
-      emit_jal(init_ref.str().c_str(), sp, 0, str);
+      emit_jal(init_ref.str().c_str(), str);
     }
 
     // Initializing attributes
@@ -647,10 +643,18 @@ void CgenClassTable::code_object_initializers()
       }
       else
       {
+        // Allocate space on the stack for all of the local variables for this attributes init method
+        // todo: ChatGPT is saying that attribute init methods can't use local variables but the coolc reference implementation does seem to allow let statements in attribute init.
+        int total_local_vars = attribute->init->get_number_of_locals();
+        emit_stack_size_push(total_local_vars, str);
+
         // Emit code for attribute initialization
         // Note: this will copy zero into ACC for no_expr_class
         SymbolTable<std::string, int> formal_table; // no method parameters for init methods so no need to populate the symbol table here with any offsets
-        attribute->init->code(str, current_node_ptr, formal_table, sp);
+        int local_var_index = CALLEE_SAVES_SIZE; // used to record the offset from fp to the local variable
+        attribute->init->code(str, current_node_ptr, formal_table, local_var_index);
+
+        emit_stack_size_pop(total_local_vars, str);
       }
 
       // Store the result of the attribute initialization in the correct location in the heap
@@ -661,10 +665,7 @@ void CgenClassTable::code_object_initializers()
     // $a0 is callee saved for the init methods so restore the value of self back to register $a0 before the method exits
     emit_move(ACC, SELF, str);
 
-    emit_callee_restores(str);
-    emit_stack_size_pop(3, sp, str);
-    emit_return(str);
-    if (cgen_debug) cout << "sp after coding init method for class " << current_node_ptr->get_name()->get_string() << " is " << sp << endl;
+    emit_callee_restores(str, 0);
   }
 }
 
@@ -687,11 +688,7 @@ void CgenClassTable::code_object_methods()
       str << ":" << endl;
       
       // emit code for the method body
-
-      int sp = 0; // used to record the position of the stack pointer so we can find local variables
-      emit_callee_saves(str, sp);
-
-      emit_addiu(FP, SP, (3 * WORD_SIZE), str); // FP now points to the first parameter
+      emit_callee_saves(str);
 
       // Save the value of self, which is stored in ACC on method entry, into register S0
       emit_move(SELF, ACC, str);
@@ -710,15 +707,18 @@ void CgenClassTable::code_object_methods()
         formals_table.addid(method->formals->nth(i)->get_name()->get_string(), fp_offset);
       }
 
-      method->expr->code(str, current_node_ptr, formals_table, sp);
-      
-      emit_callee_restores(str);
-      emit_stack_size_pop(3 + parameters->len(), sp, str);
-      emit_return(str);
-      
-      if (cgen_debug) cout << "sp after coding method " << method->name->get_string() << " for class " << current_node_ptr->get_name()->get_string() << " is " << sp << endl;
+      // Allocate space on the stack for all of the local variables for this attributes init method
+      // todo: ChatGPT is saying that attribute init methods can't use local variables but the coolc reference implementation does seem to allow let statements in attribute init.
+      int total_local_vars = method->expr->get_number_of_locals();
+      emit_stack_size_push(total_local_vars, str);
 
+      int local_var_index = CALLEE_SAVES_SIZE; // used to record the offset from fp to the local variable, points to the first empty slot
+      method->expr->code(str, current_node_ptr, formals_table, local_var_index);
       formals_table.exitscope();
+
+      emit_stack_size_pop(total_local_vars, str);
+      
+      emit_callee_restores(str, parameters->len());
     }
   }
 }
