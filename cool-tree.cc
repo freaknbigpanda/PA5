@@ -701,6 +701,11 @@ Expression object(Symbol name)
 //
 //*****************************************************************
 
+void assign_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+{
+
+}
+
 void assign_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const {
    expr->code(s, cgen_node, formals_table, local_index);
    int* fp_offset = formals_table.lookup(name->get_string());
@@ -806,12 +811,27 @@ SymbolTable<std::string, int> formals_table, int& local_index, bool is_dynamic)
    emit_jalr(T0, s);
 }
 
+void static_dispatch_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+{
+
+}
+
 void static_dispatch_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const {
    emit_dispatch(s, expr, type_name, name, actual, cgen_node, formals_table, local_index, false);
 }
 
+void dispatch_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+{
+
+}
+
 void dispatch_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const {
    emit_dispatch(s, expr, expr->type, name, actual, cgen_node, formals_table, local_index, true);
+}
+
+void cond_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+{
+
 }
 
 void cond_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const {
@@ -851,6 +871,11 @@ void cond_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, 
    emit_label_def(exit_label, s);
 }
 
+void loop_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+{
+
+}
+
 void loop_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const {
    int exit_label = label_index++;
    int loop_label = label_index++;
@@ -886,6 +911,11 @@ void loop_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, 
    emit_label_def(exit_label, s);
    // loop always returns void
    emit_load_imm(ACC, 0, s);
+}
+
+void typcase_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+{
+
 }
 
 void typcase_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const {
@@ -1014,11 +1044,21 @@ void typcase_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::strin
    emit_beq(T3, T4, "_case_abort", s);
 }
 
+void block_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+{
+
+}
+
 void block_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const {
    for(int i = body->first(); body->more(i); i = body->next(i))
    {
       body->nth(i)->code(s, cgen_node, formals_table, local_index);
    }
+}
+
+void let_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+{
+
 }
 
 void let_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const {
@@ -1108,6 +1148,10 @@ void emit_object_allocation(Symbol return_type, ostream &s)
 
 // todo: Why do the results of expressions get allocated on the heap? How does that make any sense?
 // Why couldn't we allocate the result of expressions on the stack?
+// each time we code an expression (with the exception of dispatch since we put formals on the stack) the stack pointer is returned to its previous starting location
+// this is in invariant that we can't break
+// These allocations on the heap though *can* be stored in temp registers if we can figure out what temp registers are available,
+// this is something to look at during register allocation
 
 void emit_binary_op_suffix(Symbol return_type, ostream &s)
 {
@@ -1116,6 +1160,11 @@ void emit_binary_op_suffix(Symbol return_type, ostream &s)
 
   // return the stack pointer to its previous value
   emit_stack_size_pop(1, s);
+}
+
+void plus_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+{
+
 }
 
 void plus_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
@@ -1128,6 +1177,11 @@ void plus_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, 
   emit_binary_op_suffix(Int, s);
 }
 
+void sub_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+{
+
+}
+
 void sub_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
 {
   emit_binary_op_prefix(e1, e2, s, cgen_node, formals_table, local_index);
@@ -1136,6 +1190,11 @@ void sub_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, i
   emit_sub(T2, T1, T2, s);
 
   emit_binary_op_suffix(Int, s);
+}
+
+void mul_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+{
+
 }
 
 void mul_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
@@ -1148,6 +1207,11 @@ void mul_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, i
   emit_binary_op_suffix(Int, s);
 }
 
+void divide_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+{
+
+}
+
 void divide_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
 {
   emit_binary_op_prefix(e1, e2, s, cgen_node, formals_table, local_index);
@@ -1156,6 +1220,11 @@ void divide_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string
   emit_div(T2, T1, T2, s);
 
   emit_binary_op_suffix(Int, s);
+}
+
+void neg_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+{
+
 }
 
 void neg_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
@@ -1175,6 +1244,11 @@ void neg_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, i
     emit_object_allocation(Int, s);
 }
 
+void lt_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+{
+
+}
+
 void lt_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
 {
    emit_binary_op_prefix(e1, e2, s, cgen_node, formals_table, local_index);
@@ -1191,6 +1265,11 @@ void lt_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, in
    emit_binary_op_suffix(Bool, s);
 }
 
+void leq_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+{
+
+}
+
 void leq_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
 {
    emit_binary_op_prefix(e1, e2, s, cgen_node, formals_table, local_index);
@@ -1205,6 +1284,10 @@ void leq_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, i
    emit_label_def(false_branch_label, s);
 
    emit_binary_op_suffix(Bool, s);
+}
+
+void eq_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+{
 }
 
 void eq_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
@@ -1239,6 +1322,10 @@ void eq_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, in
   emit_stack_size_pop(1, s);
 }
 
+void comp_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+{
+}
+
 // Note: this is actually the not operator. No idea why it is called comp
 void comp_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
 {
@@ -1265,6 +1352,12 @@ void comp_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, 
    emit_label_def(one_label, s);
 }
 
+void int_const_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int> &locals, int &local_index) const
+{
+   IntEntry* i = inttable.lookup_string(token->get_string());
+   tac_statements.push_back(IRStatement(IRLoad(IROperand(ACC), IRLabelOperand(get_int_const_ref(i)), IROperand(0))));
+}
+
 void int_const_class::code(ostream& s, CgenNodeP cgen_node, SymbolTable<std::string, int>&, int&) const
 {
   //
@@ -1273,14 +1366,29 @@ void int_const_class::code(ostream& s, CgenNodeP cgen_node, SymbolTable<std::str
   emit_load_int(ACC,inttable.lookup_string(token->get_string()),s);
 }
 
+void string_const_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int> &locals, int &local_index) const
+{
+   StringEntry* str = stringtable.lookup_string(token->get_string());
+   tac_statements.push_back(IRStatement(IRLoad(IROperand(ACC), IRLabelOperand(get_str_const_ref(str)), IROperand(0))));
+}
+
 void string_const_class::code(ostream& s, CgenNodeP cgen_node, SymbolTable<std::string, int>&, int&) const
 {
   emit_load_string(ACC,stringtable.lookup_string(token->get_string()),s);
 }
 
+void bool_const_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int> &locals, int &local_index) const
+{
+   tac_statements.push_back(IRStatement(IRLoad(IROperand(ACC), IRLabelOperand(get_bool_const_ref(BoolConst(val))), IROperand(0))));
+}
+
 void bool_const_class::code(ostream& s, CgenNodeP cgen_node,  SymbolTable<std::string, int>&, int&) const
 {
   emit_load_bool(ACC, BoolConst(val), s);
+}
+
+void new__class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+{
 }
 
 void new__class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>&,int& local_index) const
@@ -1342,6 +1450,27 @@ void new__class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, 
    }
 }
 
+void isvoid_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+{
+   e1->emit_ir(tac_statements, cgen_node, formals_table, local_index);
+
+   int zero_label = label_index++;
+   int one_label = label_index++;
+
+   std::stringstream one_label_ref;
+   emit_label_ref(one_label, one_label_ref);
+   std::stringstream one_label_def;
+   emit_label_def(one_label, one_label_def);
+
+   IRRelOp eq_rel_op = IRRelOp(IROperand(NOT_SPECIFIED), IROperand(ACC), IROperand(ZERO), IRRelOp::Kind::IR_EQ);
+   tac_statements.push_back(IRIfJump(eq_rel_op, get_label_ref(zero_label)));
+   tac_statements.push_back(IRLoad(IROperand(ACC), IRLabelOperand(get_bool_const_ref(BoolConst(0))), IROperand(0)));
+   tac_statements.push_back(IRLableJump(get_label_ref(one_label)));
+   tac_statements.push_back(IRLabel(get_label_ref(zero_label)));
+   tac_statements.push_back(IRLoad(IROperand(ACC), IRLabelOperand(get_bool_const_ref(BoolConst(1))), IROperand(0)));
+   tac_statements.push_back(IRLabel(get_label_ref(one_label)));
+}
+
 void isvoid_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
 {
   e1->code(s, cgen_node, formals_table, local_index);
@@ -1357,10 +1486,35 @@ void isvoid_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string
   emit_label_def(one_label, s);
 }
 
+void no_expr_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+{
+   tac_statements.push_back(IRStatement(IRLoad(IROperand(ACC), IROperand(0), IROperand(0))));
+}
+
 void no_expr_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
 {
   // Load void into ACC for no_expr
   emit_load_imm(ACC, 0, s);
+}
+
+void object_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+{
+   if (name == self) 
+   {
+      tac_statements.push_back(IRStatement(IRMove(IROperand(ACC), IROperand(SELF))));
+   }
+   else if (formals_table.lookup(name->get_string()) != nullptr)
+   {
+      int* fp_offset = formals_table.lookup(name->get_string());
+      tac_statements.push_back(IRStatement(IRLoad(IROperand(ACC), IROperand(FP), *fp_offset)));
+   } 
+   else
+   {
+      // else look for a matching attribute in the class
+      int attribute_location = cgen_node->get_attribute_location(name);
+      assert(attribute_location != -1);
+      tac_statements.push_back(IRStatement(IRLoad(IROperand(ACC), IROperand(SELF), DEFAULT_OBJFIELDS + attribute_location)));
+   }
 }
 
 void object_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
@@ -1380,7 +1534,7 @@ void object_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string
       // else look for a matching attribute in the class
       int attribute_location = cgen_node->get_attribute_location(name);
       assert(attribute_location != -1);
-      emit_load(ACC, 3 + attribute_location, SELF, s);
+      emit_load(ACC, DEFAULT_OBJFIELDS + attribute_location, SELF, s);
    }
 }
 

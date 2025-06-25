@@ -525,20 +525,16 @@ void CgenClassTable::code_dispatch_table()
 
 void CgenClassTable::generate_init_ir()
 {
-  std::vector<IRStatement> tac_statements;
-
   for(auto it = cgen_nodes_for_tag.cbegin(); it != cgen_nodes_for_tag.cend(); ++it)
   {
     CgenNode* current_node_ptr = (*it).second;
-    tac_statements.push_back(IRLabel(current_node_ptr->name->get_string()));
+    tac_statements.push_back(IRLabel(std::string(current_node_ptr->name->get_string()) + CLASSINIT_SUFFIX));
     
-    int sp = 0;
-    append_ir_method_prefix(tac_statements, 0, sp);
+    append_ir_callee_saves(tac_statements);
 
     // Save the value of self into register S0
     // note that init is *always* called after Object.copy which leaves a copy of the proto-object in ACC
-    //emit_move(SELF, ACC, str);
-    // tac_statements.push_back(IRMove(IROperand(SELF), IROperand(ACC)));
+    tac_statements.push_back(IRMove(IROperand(SELF), IROperand(ACC)));
     
     if (current_node_ptr->name != Object)
     {
@@ -572,27 +568,34 @@ void CgenClassTable::generate_init_ir()
         std::string protoObjRef = std::string(attr_type->get_string()) + PROTOBJ_SUFFIX;
         tac_statements.push_back(IRLoad(IROperand(ACC), IRLabelOperand(protoObjRef), IROperand(0)));
 
-        // tac_statements.push_back(IRRegJump(IROperand))
-        // tac_statements.push_back(IRLabelJumpAndLink())
-        // emit_object_copy(str);
+        append_ir_object_copy(tac_statements);
       }
       else
       {
+        // Allocate space on the stack for all of the local variables for this attributes init method
+        // todo: ChatGPT is saying that attribute init methods can't use local variables but the coolc reference implementation does seem to allow let statements in attribute init.
+        int total_local_vars = attribute->init->get_number_of_locals();
+        append_ir_stack_size_push(tac_statements, total_local_vars);
+
         // Emit code for attribute initialization
         // Note: this will copy zero into ACC for no_expr_class
         SymbolTable<std::string, int> formal_table; // no method parameters for init methods so no need to populate the symbol table here with any offsets
-        attribute->init->code(str, current_node_ptr, formal_table, sp);
+        int local_var_index = CALLEE_SAVES_SIZE; // used to record the offset from fp to the local variable
+        attribute->init->emit_ir(tac_statements, current_node_ptr, formal_table, local_var_index);
+
+        append_ir_stack_size_pop(tac_statements, total_local_vars);
       }
 
       // Store the result of the attribute initialization in the correct location in the heap
       int attribute_index = current_node_ptr->get_attribute_location(attribute->name);
-      emit_store(ACC, attribute_index + DEFAULT_OBJFIELDS, SELF, str);
+      tac_statements.push_back(IRStore(IROperand(SELF), IROperand(ACC), IROperand(attribute_index + DEFAULT_OBJFIELDS)));
     }
 
     // $a0 is callee saved for the init methods so restore the value of self back to register $a0 before the method exits
-    emit_move(ACC, SELF, str);
+    tac_statements.push_back(IRMove(IROperand(ACC), IROperand(SELF)));
 
     emit_callee_restores(str, 0);
+    append_ir_callee_restores(tac_statements, 0);
   }
 }
 

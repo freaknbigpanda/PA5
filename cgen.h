@@ -1,3 +1,5 @@
+#pragma once
+
 #include <assert.h>
 #include <stdio.h>
 #include <map>
@@ -32,6 +34,7 @@ class CgenClassTable : public SymbolTable<Symbol,CgenNode> {
 private:
    List<CgenNode> *code_gen_classes;
    ostream& str;
+   std::vector<IRStatement> tac_statements;
    int lastclasstag;
    CgenNodeMap cgen_nodes_for_tag;
    ClassNameToTagMap class_tag_for_name;

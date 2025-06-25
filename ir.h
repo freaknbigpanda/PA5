@@ -3,26 +3,9 @@
 #include <string>
 #include <vector>
 #include <limits>
-#include "emit.h"
+#include <iostream>
 
-// todo: pretty sure these opcodes are useless because we encode this information in the class hierarchy
-// todo: clean up the call sites for all of these IRStatements, we shouldn't ever have to instantiate IROperand at callsite
-// enum class IROpcode {
-//     // binary operations:
-//     IR_ADD, IR_SUB, IR_MUL, IR_DIV, 
-//     // relational operations:
-//     IR_LT, IR_LEQ, IR_EQ, 
-//     // unary operations:
-//     IR_NEG, IR_ASSIGN, 
-//     // labels
-//     IR_LABEL, 
-//     // control flow with conditions:
-//     IR_JUMP, IR_IF_JUMP, 
-//     // memory operations:
-//     IR_LOAD, IR_STORE, 
-//     // default/no-op:
-//     IR_NOP
-// };
+#define NOT_SPECIFIED "not_specified" // sometimes we don't need to specify a dst register in the conditional branch instructions
 
 // Note that IR Operands can only write to registers and can read from registers or immediate values.
 struct IROperand {
@@ -44,7 +27,7 @@ class IRStatement {
 
     // code to mips asm
     // todo: make this pure virtual
-    void code(ostream& s);
+    void code(std::ostream& s);
 };
 
 class IRBinaryOp : public IRStatement {
@@ -66,6 +49,19 @@ class IRUnaryOp : public IRStatement {
     protected:
     IRUnaryOp(const IROperand& d, const IROperand& r)
         : rhs(r), dst(d) {}
+};
+
+class IRRelOp : public IRBinaryOp {
+    public:
+    enum class Kind { UNINITIALIZED, IR_LT, IR_LEQ, IR_EQ } kind = Kind::UNINITIALIZED;
+    IRRelOp(const IROperand& d, const IROperand& l, const IROperand& r, IRRelOp::Kind k) 
+        : IRBinaryOp(d, l, r), kind(k) {} 
+};
+
+class IRMove : public IRUnaryOp {
+    public:
+    IRMove(const IROperand& d, const IROperand& r)
+        : IRUnaryOp(d, r) {}
 };
 
 class IRPlus : public IRBinaryOp {
@@ -126,6 +122,7 @@ class IRLableJump : public IRStatement {
 };
 
 class IRLabelJumpAndLink : public IRStatement {
+    public:
     IRLabelOperand labelDst;
 
     IRLabelJumpAndLink(const std::string& label) : labelDst(IRLabelOperand(label)) {}
@@ -134,10 +131,10 @@ class IRLabelJumpAndLink : public IRStatement {
 class IRIfJump : public IRStatement {
     public:
     IRStatement condition;
-    std::string label;
+    IRLabelOperand labelDst;
 
-    IRIfJump(const IRStatement& cond, const std::string& lbl)
-        : condition(cond), label(lbl) {}
+    IRIfJump(const IRRelOp& cond, const std::string& lbl)
+        : condition(cond), labelDst(IRLabelOperand(lbl)) {}
 };
 
 class IRMemOP : public IRBinaryOp {
@@ -172,5 +169,14 @@ class IRStore : public IRMemOP {
     }
 };
 
-void append_ir_method_prefix(std::vector<IRStatement>& statments, int parameter_count, int& sp);
-void append_ir_method_suffix(std::vector<IRStatement>& statments, int parameter_count);
+void append_ir_callee_saves(std::vector<IRStatement>& statments);
+void append_ir_callee_restores(std::vector<IRStatement>& statments, int parameter_count);
+void append_ir_stack_size_push(std::vector<IRStatement>& statements, int num_words);
+void append_ir_stack_size_pop(std::vector<IRStatement>& statements, int num_words);
+void append_ir_object_copy(std::vector<IRStatement>& statements);
+std::string get_label_ref(int label_index);
+std::string get_label_def(int label_index);
+class BoolConst; class StringEntry; class IntEntry; 
+std::string get_bool_const_ref(const BoolConst& b);
+std::string get_str_const_ref(StringEntry *str);
+std::string get_int_const_ref(IntEntry *i); 
