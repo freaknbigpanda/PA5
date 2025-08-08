@@ -6,14 +6,13 @@
 //
 //////////////////////////////////////////////////////////
 
-
+#include <sstream>
+#include <algorithm>
+#include <set>
 #include "tree.h"
 #include "cool-tree.h"
 #include "cgen.h"
 #include "emit.h"
-#include <sstream>
-#include <algorithm>
-#include <set>
 #include "cgen_gc.h"
 
 extern Symbol
@@ -701,9 +700,30 @@ Expression object(Symbol name)
 //
 //*****************************************************************
 
-void assign_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+void assign_class::emit_ir(IRStatements& tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
 {
-
+   expr->emit_ir(tac_statements,cgen_node, formals_table, local_index);
+   int* fp_offset = formals_table.lookup(name->get_string());
+   int attribute_location = cgen_node->get_attribute_location(name);
+   if (fp_offset != nullptr)
+   {
+      tac_statements.push_back(std::make_unique<IRStore>(IROperand(FP), IROperand(ACC), IROperand(*fp_offset)));
+   }
+   else if (attribute_location != -1)
+   {
+      //assign to attribute
+      tac_statements.push_back(std::make_unique<IRStore>(IROperand(SELF), IROperand(ACC), IROperand(DEFAULT_OBJFIELDS + attribute_location)));
+      
+      if (cgen_Memmgr != GC_NOGC)
+      {
+         tac_statements.push_back(std::make_unique<IRAdd>(IROperand(A1), IROperand(SELF), IROperand((DEFAULT_OBJFIELDS + attribute_location) * WORD_SIZE)));
+         tac_statements.push_back(std::make_unique<IRLabelJumpAndLink>("_GenGC_Assign"));
+      }
+   }
+   else
+   {
+      abort(); // Should always be able to find the symbol to assign to
+   }
 }
 
 void assign_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const {
@@ -717,11 +737,11 @@ void assign_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string
    else if (attribute_location != -1)
    {
       //assign to attribute
-      emit_store(ACC, 3 + attribute_location, SELF, s);
+      emit_store(ACC, DEFAULT_OBJFIELDS + attribute_location, SELF, s);
       
       if (cgen_Memmgr != GC_NOGC)
       {
-         emit_addiu(A1, SELF, (3 + attribute_location) * WORD_SIZE, s);
+         emit_addiu(A1, SELF, (DEFAULT_OBJFIELDS + attribute_location) * WORD_SIZE, s);
          emit_jal("_GenGC_Assign", s);
       }
    }
@@ -732,17 +752,94 @@ void assign_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string
 }
 
 // Loads filename into a0 and linenumber into t1 for abort messages
+void emit_load_filename_and_line_number_ir(IRStatements& tac_statements, Expression expr, CgenNodeP cgen_node)
+{
+   // Load filename into a0
+   std::string filename = cgen_node->get_filename()->get_string();
+   StringEntry* string_entry = stringtable.lookup_string(filename.c_str());
+   tac_statements.push_back(std::make_unique<IRLoad>(IROperand(ACC), IRLabelOperand(get_str_const_ref(string_entry)), IROperand(0)));
+
+   // Load line number in T1
+   tac_statements.push_back(std::make_unique<IRAssign>(IROperand(T1), expr->get_line_number()));
+}
+
+// Loads filename into a0 and linenumber into t1 for abort messages
 void emit_load_filename_and_line_number(ostream &s, Expression  expr, CgenNodeP cgen_node)
 {
    // Load filename into a0
-   std::stringstream filename_string_stream;
    std::string filename = cgen_node->get_filename()->get_string();
    StringEntry* string_entry = stringtable.lookup_string(filename.c_str());
-   string_entry->code_ref(filename_string_stream);
-   emit_load_address(ACC, filename_string_stream.str().c_str(), s);
+   emit_load_address(ACC, get_str_const_ref(string_entry).c_str(), s);
 
    // Load line number in T1
    emit_load_imm(T1, expr->get_line_number(), s);
+}
+
+void emit_dispatch_ir(IRStatements& tac_statements, Expression expression, Symbol dispatch_type, Symbol method_name, Expressions parameters, CgenNodeP cgen_node, 
+SymbolTable<std::string, int> formals_table, int& local_index, bool is_dynamic)
+{
+   // Push all of the parameters onto the stack
+   for(int i = parameters->first(); parameters->more(i); i = parameters->next(i))
+   {
+      // Emit code for parameter expression
+      parameters->nth(i)->emit_ir(tac_statements, cgen_node, formals_table, local_index);
+
+      // Copy the parameter to a new location on the heap as specified by cool operational semantics
+      // todo: Doesn't seem to be needed because I fail a test with this not commented out
+      // emit_object_copy(s);
+
+      tac_statements.push_back(std::make_unique<IRStore>(IROperand(SP), IROperand(ACC), IROperand(0)));
+      // emit_store(ACC, 0, SP, s);
+      // tac_statements.push_back(std::make_unique<IRPlus>(IROperand(A1), IROperand(SELF), IROperand((DEFAULT_OBJFIELDS + attribute_location) * WORD_SIZE)));
+      // bump the stack pointer
+      append_ir_stack_size_push(tac_statements, 1);
+   }
+
+   // Emit the code for the self object we are dispatching to
+   expression->emit_ir(tac_statements, cgen_node, formals_table, local_index);
+
+   int continue_dispatch = label_index++;
+
+   // If ACC == ZERO load line number in t1 and filename in a0 and call _dispatch_abort
+   IRRelOp rel_op = IRRelOp(IROperand(ACC), IROperand(ZERO), IRRelOp::Kind::IR_NEQ);
+   tac_statements.push_back(std::make_unique<IRIfJump>(rel_op, get_label_ref(continue_dispatch)));
+
+   emit_load_filename_and_line_number_ir(tac_statements, expression, cgen_node);
+   
+   // Jump to dispatch abort
+   tac_statements.push_back(std::make_unique<IRLabelJump>("_dispatch_abort"));
+
+   // If the expression was not void continue with the dispatch
+   tac_statements.push_back(std::make_unique<IRLabel>(get_label_def(continue_dispatch)));
+
+   // Get the index into the dispatch table for this method
+   Symbol expr_type = dispatch_type == SELF_TYPE ? cgen_node->name : dispatch_type;
+   CgenNodeP dispatch_cgen_node = cgen_node->get_symbol_table()->lookup(expr_type);
+   int method_index = dispatch_cgen_node->get_method_location(method_name);
+   assert(method_index != -1);
+
+   if (is_dynamic == false)
+   {
+      // Load the proto object for the dispatch type into T0
+      tac_statements.push_back(std::make_unique<IRLoad>(IROperand(T0), IRLabelOperand(get_protobj_ref(expr_type)), 0));
+   }
+   else
+   {
+      // Moving the dispatch type into TO 
+      tac_statements.push_back(std::make_unique<IRMove>(IROperand(T0), IROperand(ACC)));
+   }
+
+   // Load the address of the dispatch table into T0
+   tac_statements.push_back(std::make_unique<IRLoad>(IROperand(T0), IROperand(T0), IROperand(2)));
+
+   // Add the offset for the method location in the dispatch table
+   tac_statements.push_back(std::make_unique<IRAdd>(IROperand(T0), IROperand(T0), method_index * WORD_SIZE));
+
+   // Method address is now loaded into T0
+   tac_statements.push_back(std::make_unique<IRLoad>(IROperand(T0), IROperand(T0), IROperand(0)));
+
+   // Jal to the method definition
+   tac_statements.push_back(std::make_unique<IRRegJumpAndLink>(T0));
 }
 
 void emit_dispatch(ostream &s, Expression expression, Symbol dispatch_type, Symbol method_name, Expressions parameters, CgenNodeP cgen_node, 
@@ -811,27 +908,56 @@ SymbolTable<std::string, int> formals_table, int& local_index, bool is_dynamic)
    emit_jalr(T0, s);
 }
 
-void static_dispatch_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+void static_dispatch_class::emit_ir(IRStatements& tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
 {
-
+   emit_dispatch_ir(tac_statements, expr, type_name, name, actual, cgen_node, formals_table, local_index, false);
 }
 
 void static_dispatch_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const {
    emit_dispatch(s, expr, type_name, name, actual, cgen_node, formals_table, local_index, false);
 }
 
-void dispatch_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+void dispatch_class::emit_ir(IRStatements& tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
 {
-
+   emit_dispatch_ir(tac_statements, expr, expr->type, name, actual, cgen_node, formals_table, local_index, true);
 }
 
 void dispatch_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const {
    emit_dispatch(s, expr, expr->type, name, actual, cgen_node, formals_table, local_index, true);
 }
 
-void cond_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+void cond_class::emit_ir(IRStatements& tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
 {
+    int else_label = label_index++;
+    int exit_label = label_index++;
 
+    // Evaluate predicate
+    pred->emit_ir(tac_statements, cgen_node, formals_table, local_index);
+
+    // Load BoolConst(1) into T1
+    tac_statements.push_back(std::make_unique<IRLoad>(IROperand(T1), IRLabelOperand(get_bool_const_ref(BoolConst(1))), IROperand(0)));
+    // Move ACC (predicate result) into T2
+    tac_statements.push_back(std::make_unique<IRMove>(IROperand(T2), IROperand(ACC)));
+    // Set ACC to 1 (true)
+    tac_statements.push_back(std::make_unique<IRAssign>(IROperand(ACC), 1));
+    // Set A1 to 0 (false)
+    tac_statements.push_back(std::make_unique<IRAssign>(IROperand(A1), 0));
+    // Simulate call to equality_test (could be a function call or inlined logic)
+    tac_statements.push_back(std::make_unique<IRLabelJumpAndLink>("equality_test"));
+    // If ACC == 0, branch to else_label
+    IRRelOp cond(IROperand(ACC), IROperand(0), IRRelOp::Kind::IR_EQ);
+    tac_statements.push_back(std::make_unique<IRIfJump>(cond, get_label_ref(else_label)));
+
+    // Then branch
+    then_exp->emit_ir(tac_statements, cgen_node, formals_table, local_index);
+    tac_statements.push_back(std::make_unique<IRLabelJump>(get_label_ref(exit_label)));
+
+    // Else branch
+    tac_statements.push_back(std::make_unique<IRLabel>(get_label_ref(else_label)));
+    else_exp->emit_ir(tac_statements, cgen_node, formals_table, local_index);
+
+    // Exit label
+    tac_statements.push_back(std::make_unique<IRLabel>(get_label_ref(exit_label)));
 }
 
 void cond_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const {
@@ -847,7 +973,7 @@ void cond_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, 
    emit_load_bool(T1, BoolConst(1), s);
 
    // Then load the result of the pred expression into T2
-   emit_add(T2, ACC, ZERO, s);
+   emit_move(T2, ACC, s);
 
    // Value returned in ACC if true
    emit_load_imm(ACC, 1, s);
@@ -871,9 +997,44 @@ void cond_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, 
    emit_label_def(exit_label, s);
 }
 
-void loop_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+void loop_class::emit_ir(IRStatements& tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
 {
+    int exit_label = label_index++;
+    int loop_label = label_index++;
+    int evaluate_pred_label = label_index++;
 
+    // Label for evaluating the predicate
+    tac_statements.push_back(std::make_unique<IRLabel>(get_label_def(evaluate_pred_label)));
+
+    // Emit IR for predicate
+    pred->emit_ir(tac_statements, cgen_node, formals_table, local_index);
+
+    // Load BoolConst(1) into T1
+    tac_statements.push_back(std::make_unique<IRLoad>(IROperand(T1), IRLabelOperand(get_bool_const_ref(BoolConst(1))), IROperand(0)));
+    // Move ACC (predicate result) into T2
+    tac_statements.push_back(std::make_unique<IRMove>(IROperand(T2), IROperand(ACC)));
+    // Set ACC to 1 (true)
+    tac_statements.push_back(std::make_unique<IRAssign>(IROperand(ACC), 1));
+    // Set A1 to 0 (false)
+    tac_statements.push_back(std::make_unique<IRAssign>(IROperand(A1), 0));
+    // Simulate call to equality_test
+    tac_statements.push_back(std::make_unique<IRLabelJumpAndLink>("equality_test"));
+    // If ACC == 0, branch to exit_label
+    IRRelOp cond(IROperand(ACC), IROperand(0), IRRelOp::Kind::IR_EQ);
+    tac_statements.push_back(std::make_unique<IRIfJump>(cond, get_label_ref(exit_label)));
+
+    // Label for loop body
+    tac_statements.push_back(std::make_unique<IRLabel>(get_label_def(loop_label)));
+    // Emit IR for loop body
+    body->emit_ir(tac_statements, cgen_node, formals_table, local_index);
+    // Jump back to predicate evaluation
+    tac_statements.push_back(std::make_unique<IRLabelJump>(get_label_ref(evaluate_pred_label)));
+
+    // Exit label
+    tac_statements.push_back(std::make_unique<IRLabel>(get_label_ref(exit_label)));
+
+    // Loop always returns void (ACC = 0)
+    tac_statements.push_back(std::make_unique<IRAssign>(IROperand(ACC), 0));
 }
 
 void loop_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const {
@@ -891,7 +1052,7 @@ void loop_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, 
    emit_load_bool(T1, BoolConst(1), s);
 
    // Then load the result of the pred expression into T2
-   emit_add(T2, ACC, ZERO, s);
+   emit_move(T2, ACC, s);
 
    // Value returned in ACC if true
    emit_load_imm(ACC, 1, s);
@@ -913,9 +1074,103 @@ void loop_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, 
    emit_load_imm(ACC, 0, s);
 }
 
-void typcase_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+void typcase_class::emit_ir(IRStatements& tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
 {
+    // Evaluate the case expression
+    expr->emit_ir(tac_statements, cgen_node, formals_table, local_index);
 
+    int continue_case = label_index++;
+    // If ACC == ZERO, abort
+    IRRelOp not_void_cond(IROperand(ACC), IROperand(ZERO), IRRelOp::Kind::IR_NEQ);
+    tac_statements.push_back(std::make_unique<IRIfJump>(not_void_cond, get_label_ref(continue_case)));
+
+    emit_load_filename_and_line_number_ir(tac_statements, expr, cgen_node);
+    tac_statements.push_back(std::make_unique<IRLabelJump>("_case_abort2"));
+
+    // Continue with case statement
+    tac_statements.push_back(std::make_unique<IRLabel>(get_label_def(continue_case)));
+
+    // Get class tag for the case expression
+    tac_statements.push_back(std::make_unique<IRLoad>(IROperand(T1), IROperand(ACC), IROperand(0)));
+    // Load word size into T2
+    tac_statements.push_back(std::make_unique<IRAssign>(IROperand(T2), WORD_SIZE));
+    // Multiply T1 by WORD_SIZE
+    tac_statements.push_back(std::make_unique<IRMul>(IROperand(T1), IROperand(T1), IROperand(T2)));
+    // Load address of class_tag table into T2
+    tac_statements.push_back(std::make_unique<IRLoad>(IROperand(T2), IRLabelOperand(CLASSTAGTAB), IROperand(0)));
+    // Add offset to T1
+    tac_statements.push_back(std::make_unique<IRAdd>(IROperand(T1), IROperand(T2), IROperand(T1)));
+    // Load inheritance table address into T0
+    tac_statements.push_back(std::make_unique<IRLoad>(IROperand(T0), IROperand(T1), IROperand(0)));
+
+    // Prepare and sort branches by inheritance depth
+    std::vector<branch_class*> case_branches;
+    for(int i = cases->first(); cases->more(i); i = cases->next(i))
+        case_branches.push_back(static_cast<branch_class*>(cases->nth(i)));
+
+    std::sort(case_branches.begin(), case_branches.end(), [cgen_node](branch_class* first, branch_class* second) {
+        CgenNodeP first_branch_type = cgen_node->get_symbol_table()->lookup(first->type_decl);
+        CgenNodeP second_branch_type = cgen_node->get_symbol_table()->lookup(second->type_decl);
+        return first_branch_type->get_inheritance_depth() > second_branch_type->get_inheritance_depth();
+    });
+
+    int case_finished_label = label_index++;
+
+    for(auto it = case_branches.cbegin(); it != case_branches.cend(); ++it)
+    {
+        int case_match_found_label = label_index++;
+        int case_branch_loop_label = label_index++;
+        int case_branch_exit_label = label_index++;
+
+        branch_class* caseBranch = *it;
+
+        // Load inheritance table address into T1
+        tac_statements.push_back(std::make_unique<IRAdd>(IROperand(T1), IROperand(T0), IROperand(0)));
+        // Load proto obj address into T2
+        tac_statements.push_back(std::make_unique<IRLoad>(IROperand(T2), IRLabelOperand(get_protobj_ref(caseBranch->type_decl)), IROperand(0)));
+        // Load class tag for this branch type into T2
+        tac_statements.push_back(std::make_unique<IRLoad>(IROperand(T2), IROperand(T2), IROperand(0)));
+
+        // Loop: check inheritance table for match
+        tac_statements.push_back(std::make_unique<IRLabel>(get_label_def(case_branch_loop_label)));
+        tac_statements.push_back(std::make_unique<IRLoad>(IROperand(T3), IROperand(T1), IROperand(0)));
+
+        // If T3 == 1, exit (no match)
+        tac_statements.push_back(std::make_unique<IRAssign>(IROperand(T4), 1));
+        tac_statements.push_back(std::make_unique<IRRelOp>(IROperand(T3), IROperand(T4), IRRelOp::Kind::IR_EQ));
+        tac_statements.push_back(std::make_unique<IRIfJump>(IRRelOp(IROperand(T3), IROperand(T4), IRRelOp::Kind::IR_EQ), get_label_ref(case_branch_exit_label)));
+
+        // If T3 == T2, match found
+        tac_statements.push_back(std::make_unique<IRRelOp>(IROperand(T3), IROperand(T2), IRRelOp::Kind::IR_EQ));
+        tac_statements.push_back(std::make_unique<IRIfJump>(IRRelOp(IROperand(T3), IROperand(T2), IRRelOp::Kind::IR_EQ), get_label_ref(case_match_found_label)));
+
+        // Increment T1 and loop
+        tac_statements.push_back(std::make_unique<IRAdd>(IROperand(T1), IROperand(T1), IROperand(WORD_SIZE)));
+        tac_statements.push_back(std::make_unique<IRLabelJump>(get_label_ref(case_branch_loop_label)));
+
+        // Match found: evaluate branch
+        tac_statements.push_back(std::make_unique<IRLabel>(get_label_def(case_match_found_label)));
+        tac_statements.push_back(std::make_unique<IRStore>(IROperand(FP), IROperand(ACC), IROperand(-1 * local_index)));
+        formals_table.enterscope();
+        int* fp_offset = new int;
+        *fp_offset = local_index * -1;
+        formals_table.addid(caseBranch->name->get_string(), fp_offset);
+        // increment for the next local var
+        local_index++;
+        caseBranch->expr->emit_ir(tac_statements, cgen_node, formals_table, local_index);
+        formals_table.exitscope();
+        local_index--;
+        tac_statements.push_back(std::make_unique<IRLabelJump>(get_label_ref(case_finished_label)));
+
+        // Branch exit
+        tac_statements.push_back(std::make_unique<IRLabel>(get_label_def(case_branch_exit_label)));
+    }
+
+    tac_statements.push_back(std::make_unique<IRLabel>(get_label_ref(case_finished_label)));
+    // If T3 == 1 after all branches, abort
+    tac_statements.push_back(std::make_unique<IRAssign>(IROperand(T4), 1));
+    tac_statements.push_back(std::make_unique<IRRelOp>(IROperand(T3), IROperand(T4), IRRelOp::Kind::IR_EQ));
+    tac_statements.push_back(std::make_unique<IRIfJump>(IRRelOp(IROperand(T3), IROperand(T4), IRRelOp::Kind::IR_EQ), "_case_abort"));
 }
 
 void typcase_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const {
@@ -1013,21 +1268,18 @@ void typcase_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::strin
       // Push the result of the case predicate evaluation onto the stack so that the case body expression can access it
       emit_store(ACC, -1*local_index, FP, s);
 
-      // increase the local index which we will use to calculate the fp offset for the case variable
-      local_index++;
-
       // code gen for the case statement branch
       formals_table.enterscope();
 
       // Keep track of the case binding
       int* fp_offset = new int;
-      *fp_offset = (local_index - 1) * -1;
+      *fp_offset = local_index * -1;
       formals_table.addid(caseBranch->name->get_string(), fp_offset);
       
+      // Increment local index for the new variable
+      local_index++;
       caseBranch->expr->code(s, cgen_node, formals_table, local_index);
-
       formals_table.exitscope();
-
       // Decrease the local index since we have exited the case variable scope
       local_index--;
 
@@ -1044,9 +1296,12 @@ void typcase_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::strin
    emit_beq(T3, T4, "_case_abort", s);
 }
 
-void block_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+void block_class::emit_ir(IRStatements& tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
 {
-
+   for(int i = body->first(); body->more(i); i = body->next(i))
+   {
+      body->nth(i)->emit_ir(tac_statements, cgen_node, formals_table, local_index);
+   }
 }
 
 void block_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const {
@@ -1056,9 +1311,42 @@ void block_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string,
    }
 }
 
-void let_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+void let_class::emit_ir(IRStatements& tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
 {
+    // Enter a new scope for the let variable
+    formals_table.enterscope();
 
+    // Evaluate the initializer expression (if any)
+    if (dynamic_cast<no_expr_class*>(init) == nullptr) {
+        init->emit_ir(tac_statements, cgen_node, formals_table, local_index);
+        // Store the result of the initializer in the new variable slot
+        tac_statements.push_back(std::make_unique<IRStore>(IROperand(FP), IROperand(ACC), IROperand(-1 * local_index)));
+    } else {
+        // If no initializer, assign default value based on type
+        if (type_decl == Int || type_decl == Bool) {
+            tac_statements.push_back(std::make_unique<IRAssign>(IROperand(ACC), 0));
+        } else if (type_decl == Str) {
+            tac_statements.push_back(std::make_unique<IRLoad>(IROperand(ACC), IRLabelOperand(STRCONST_PREFIX "empty_str"), IROperand(0)));
+        } else {
+            tac_statements.push_back(std::make_unique<IRAssign>(IROperand(ACC), 0)); // void
+        }
+        tac_statements.push_back(std::make_unique<IRStore>(IROperand(FP), IROperand(ACC), IROperand(-1 * local_index)));
+    }
+
+    // Add the let variable to the symbol table
+    int* fp_offset = new int;
+    *fp_offset = local_index * -1;
+    formals_table.addid(identifier->get_string(), fp_offset);
+
+    // Increment local index for the new variable
+    local_index++;
+
+    // Emit IR for the body of the let expression
+    body->emit_ir(tac_statements, cgen_node, formals_table, local_index);
+
+    // Exit the scope and decrement local index
+    formals_table.exitscope();
+    local_index--;
 }
 
 void let_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const {
@@ -1086,14 +1374,14 @@ void let_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, i
    // Push the result of the copy onto the stack
    emit_store(ACC, -1 * local_index, FP, s);
 
-   // increase the local index which we will use to calculate the fp offset for the let variable
-   local_index++;
-
    formals_table.enterscope();
 
    int* fp_offset = new int;
-   *fp_offset = (local_index - 1) * -1;
+   *fp_offset = local_index * -1;
    formals_table.addid(identifier->get_string(), fp_offset);
+
+   // Increment local index for the new variable
+   local_index++;
 
    // Then evaluate the body of the let
    body->code(s, cgen_node, formals_table, local_index);
@@ -1129,6 +1417,26 @@ void emit_binary_op_prefix(Expression lhs, Expression rhs, ostream &s, CgenNodeP
   //T1 now stores the lhs int operand and T2 now stores the rhs int operand-
 }
 
+void emit_binary_op_prefix_ir(IRStatements& tac_statements, Expression lhs, Expression rhs, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index)
+{
+    // Evaluate lhs and push result to stack
+    lhs->emit_ir(tac_statements, cgen_node, formals_table, local_index);
+    tac_statements.push_back(std::make_unique<IRStore>(IROperand(SP), IROperand(ACC), IROperand(0)));
+    append_ir_stack_size_push(tac_statements, 1);
+
+    // Evaluate rhs
+    rhs->emit_ir(tac_statements, cgen_node, formals_table, local_index);
+
+    // Load address of lhs result into T2
+    tac_statements.push_back(std::make_unique<IRLoad>(IROperand(T2), IROperand(SP), IROperand(1)));
+
+    // Load int result from lhs into T1
+    tac_statements.push_back(std::make_unique<IRLoad>(IROperand(T1), IROperand(T2), IROperand(3)));
+
+    // Load int result from rhs into T2
+    tac_statements.push_back(std::make_unique<IRLoad>(IROperand(T2), IROperand(ACC), IROperand(3)));
+}
+
 void emit_object_allocation(Symbol return_type, ostream &s)
 {
   /* Create a new return object on the heap, populate its data field with the value in ACC, and populate ACC with a pointer to that object
@@ -1146,12 +1454,22 @@ void emit_object_allocation(Symbol return_type, ostream &s)
   emit_store(T2, 3, ACC, s);
 }
 
+void emit_object_allocation_ir(IRStatements& tac_statements, Symbol return_type)
+{
+    // Load the proto object address into ACC
+    tac_statements.push_back(std::make_unique<IRLoad>(IROperand(ACC), IRLabelOperand(get_protobj_ref(return_type)), IROperand(0)));
+    // Copy the object onto the heap
+    append_ir_object_copy(tac_statements);
+    // Store the result in T2 into the object stored at ACC
+    tac_statements.push_back(std::make_unique<IRStore>(IROperand(ACC), IROperand(T2), IROperand(3)));
+}
+
 // todo: Why do the results of expressions get allocated on the heap? How does that make any sense?
 // Why couldn't we allocate the result of expressions on the stack?
 // each time we code an expression (with the exception of dispatch since we put formals on the stack) the stack pointer is returned to its previous starting location
 // this is in invariant that we can't break
 // These allocations on the heap though *can* be stored in temp registers if we can figure out what temp registers are available,
-// this is something to look at during register allocation
+// todo: take a look at this when implementing register allocation
 
 void emit_binary_op_suffix(Symbol return_type, ostream &s)
 {
@@ -1162,9 +1480,24 @@ void emit_binary_op_suffix(Symbol return_type, ostream &s)
   emit_stack_size_pop(1, s);
 }
 
-void plus_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+void emit_binary_op_suffix_ir(IRStatements& tac_statements, Symbol return_type)
 {
+    // For Int, allocate a new object
+    if (return_type == Int)
+        emit_object_allocation_ir(tac_statements, return_type);
 
+    // Return the stack pointer to its previous value
+    append_ir_stack_size_pop(tac_statements, 1);
+}
+
+void plus_class::emit_ir(IRStatements& tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+{
+    emit_binary_op_prefix_ir(tac_statements, e1, e2, cgen_node, formals_table, local_index);
+
+    // add T1 + T2, result in T2
+    tac_statements.push_back(std::make_unique<IRAdd>(IROperand(T2), IROperand(T1), IROperand(T2)));
+
+    emit_binary_op_suffix_ir(tac_statements, Int);
 }
 
 void plus_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
@@ -1177,9 +1510,14 @@ void plus_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, 
   emit_binary_op_suffix(Int, s);
 }
 
-void sub_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+void sub_class::emit_ir(IRStatements& tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
 {
+    emit_binary_op_prefix_ir(tac_statements, e1, e2, cgen_node, formals_table, local_index);
 
+    // sub T1 - T2, result in T2
+    tac_statements.push_back(std::make_unique<IRSub>(IROperand(T2), IROperand(T1), IROperand(T2)));
+
+    emit_binary_op_suffix_ir(tac_statements, Int);
 }
 
 void sub_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
@@ -1192,9 +1530,14 @@ void sub_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, i
   emit_binary_op_suffix(Int, s);
 }
 
-void mul_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+void mul_class::emit_ir(IRStatements& tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
 {
+    emit_binary_op_prefix_ir(tac_statements, e1, e2, cgen_node, formals_table, local_index);
 
+    // mul T1 * T2, result in T2
+    tac_statements.push_back(std::make_unique<IRMul>(IROperand(T2), IROperand(T1), IROperand(T2)));
+
+    emit_binary_op_suffix_ir(tac_statements, Int);
 }
 
 void mul_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
@@ -1207,9 +1550,14 @@ void mul_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, i
   emit_binary_op_suffix(Int, s);
 }
 
-void divide_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+void divide_class::emit_ir(IRStatements& tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
 {
+    emit_binary_op_prefix_ir(tac_statements, e1, e2, cgen_node, formals_table, local_index);
 
+    // div T1 / T2, result in T2
+    tac_statements.push_back(std::make_unique<IRDiv>(IROperand(T2), IROperand(T1), IROperand(T2)));
+
+    emit_binary_op_suffix_ir(tac_statements, Int);
 }
 
 void divide_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
@@ -1222,9 +1570,21 @@ void divide_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string
   emit_binary_op_suffix(Int, s);
 }
 
-void neg_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+void neg_class::emit_ir(IRStatements& tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
 {
+    e1->emit_ir(tac_statements, cgen_node, formals_table, local_index);
 
+    // Load the int value into ACC
+    tac_statements.push_back(std::make_unique<IRLoad>(IROperand(ACC), IROperand(ACC), IROperand(3)));
+
+    // Load -1 into T1
+    tac_statements.push_back(std::make_unique<IRAssign>(IROperand(T1), -1));
+
+    // Negate the int value by multiplying by -1, result in T2
+    tac_statements.push_back(std::make_unique<IRMul>(IROperand(T2), IROperand(ACC), IROperand(T1)));
+
+    // Create a new Int object on the heap and store the value of T2 in it
+    emit_object_allocation_ir(tac_statements, Int);
 }
 
 void neg_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
@@ -1244,9 +1604,28 @@ void neg_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, i
     emit_object_allocation(Int, s);
 }
 
-void lt_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+void lt_class::emit_ir(IRStatements& tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
 {
+    emit_binary_op_prefix_ir(tac_statements, e1, e2, cgen_node, formals_table, local_index);
 
+    int true_branch_label = label_index++;
+    int false_branch_label = label_index++;
+
+    // If T1 < T2, branch to true_branch_label
+    tac_statements.push_back(std::make_unique<IRIfJump>(IRRelOp(IROperand(T1), IROperand(T2), IRRelOp::Kind::IR_LT), get_label_ref(true_branch_label)));
+
+    // False branch: load BoolConst(0) into ACC and jump to false_branch_label
+    tac_statements.push_back(std::make_unique<IRLoad>(IROperand(ACC), IRLabelOperand(get_bool_const_ref(BoolConst(0))), IROperand(0)));
+    tac_statements.push_back(std::make_unique<IRLabelJump>(get_label_ref(false_branch_label)));
+
+    // True branch: load BoolConst(1) into ACC
+    tac_statements.push_back(std::make_unique<IRLabel>(get_label_def(true_branch_label)));
+    tac_statements.push_back(std::make_unique<IRLoad>(IROperand(ACC), IRLabelOperand(get_bool_const_ref(BoolConst(1))), IROperand(0)));
+
+    // False branch label
+    tac_statements.push_back(std::make_unique<IRLabel>(get_label_def(false_branch_label)));
+
+    emit_binary_op_suffix_ir(tac_statements, Bool);
 }
 
 void lt_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
@@ -1265,9 +1644,28 @@ void lt_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, in
    emit_binary_op_suffix(Bool, s);
 }
 
-void leq_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+void leq_class::emit_ir(IRStatements& tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
 {
+    emit_binary_op_prefix_ir(tac_statements, e1, e2, cgen_node, formals_table, local_index);
 
+    int true_branch_label = label_index++;
+    int false_branch_label = label_index++;
+
+    // If T1 <= T2, branch to true_branch_label
+    tac_statements.push_back(std::make_unique<IRIfJump>(IRRelOp(IROperand(T1), IROperand(T2), IRRelOp::Kind::IR_LEQ), get_label_ref(true_branch_label)));
+
+    // False branch: load BoolConst(0) into ACC and jump to false_branch_label
+    tac_statements.push_back(std::make_unique<IRLoad>(IROperand(ACC), IRLabelOperand(get_bool_const_ref(BoolConst(0))), IROperand(0)));
+    tac_statements.push_back(std::make_unique<IRLabelJump>(get_label_ref(false_branch_label)));
+
+    // True branch: load BoolConst(1) into ACC
+    tac_statements.push_back(std::make_unique<IRLabel>(get_label_def(true_branch_label)));
+    tac_statements.push_back(std::make_unique<IRLoad>(IROperand(ACC), IRLabelOperand(get_bool_const_ref(BoolConst(1))), IROperand(0)));
+
+    // False branch label
+    tac_statements.push_back(std::make_unique<IRLabel>(get_label_def(false_branch_label)));
+
+    emit_binary_op_suffix_ir(tac_statements, Bool);
 }
 
 void leq_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
@@ -1286,8 +1684,33 @@ void leq_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, i
    emit_binary_op_suffix(Bool, s);
 }
 
-void eq_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+void eq_class::emit_ir(IRStatements& tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
 {
+    e1->emit_ir(tac_statements, cgen_node, formals_table, local_index);
+    // Push result of LHS onto the stack
+    tac_statements.push_back(std::make_unique<IRStore>(IROperand(SP), IROperand(ACC), IROperand(0)));
+    append_ir_stack_size_push(tac_statements, 1);
+
+    e2->emit_ir(tac_statements, cgen_node, formals_table, local_index);
+    // move RHS into T2
+    tac_statements.push_back(std::make_unique<IRMove>(IROperand(T2), IROperand(ACC)));
+    // load LHS into T1
+    tac_statements.push_back(std::make_unique<IRLoad>(IROperand(T1), IROperand(SP), IROperand(1)));
+
+    // True branch if pointers are equal
+    int pointers_are_equal = label_index++;
+    tac_statements.push_back(std::make_unique<IRIfJump>(IRRelOp(IROperand(T2), IROperand(T1), IRRelOp::Kind::IR_EQ), get_label_ref(pointers_are_equal)));
+
+    // Pointers not equal so continue with equality test
+    tac_statements.push_back(std::make_unique<IRLoad>(IROperand(A1), IRLabelOperand(get_bool_const_ref(BoolConst(0))), IROperand(0)));
+    tac_statements.push_back(std::make_unique<IRLabelJumpAndLink>("equality_test"));
+
+    // True branch: load BoolConst(1) into ACC
+    tac_statements.push_back(std::make_unique<IRLabel>(get_label_def(pointers_are_equal)));
+    tac_statements.push_back(std::make_unique<IRLoad>(IROperand(ACC), IRLabelOperand(get_bool_const_ref(BoolConst(1))), IROperand(0)));
+
+    // Restore the stack pointer
+    append_ir_stack_size_pop(tac_statements, 1);
 }
 
 void eq_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
@@ -1322,15 +1745,30 @@ void eq_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, in
   emit_stack_size_pop(1, s);
 }
 
-void comp_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+void comp_class::emit_ir(IRStatements& tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
 {
+    e1->emit_ir(tac_statements, cgen_node, formals_table, local_index);
+
+    // Load the bool value into ACC
+    tac_statements.push_back(std::make_unique<IRLoad>(IROperand(ACC), IROperand(ACC), IROperand(3)));
+
+    // Invert the bool: if ACC < 1 set ACC to 1, else set to 0
+    tac_statements.push_back(std::make_unique<IRRelOp>(IROperand(T2), IROperand(ACC), IROperand(1), IRRelOp::Kind::IR_LT));
+
+    int zero_label = label_index++;
+    int one_label = label_index++;
+
+    tac_statements.push_back(std::make_unique<IRIfJump>(IRRelOp(IROperand(T2), IROperand(0), IRRelOp::Kind::IR_EQ), get_label_ref(zero_label)));
+    tac_statements.push_back(std::make_unique<IRLoad>(IROperand(ACC), IRLabelOperand(get_bool_const_ref(BoolConst(1))), IROperand(0)));
+    tac_statements.push_back(std::make_unique<IRLabelJump>(get_label_ref(one_label)));
+    tac_statements.push_back(std::make_unique<IRLabel>(get_label_def(zero_label)));
+    tac_statements.push_back(std::make_unique<IRLoad>(IROperand(ACC), IRLabelOperand(get_bool_const_ref(BoolConst(0))), IROperand(0)));
+    tac_statements.push_back(std::make_unique<IRLabel>(get_label_def(one_label)));
 }
 
 // Note: this is actually the not operator. No idea why it is called comp
 void comp_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
 {
-   int false_label = label_index++;
-   int true_label = label_index++;
    // this produces a bool value in acc
    e1->code(s, cgen_node, formals_table, local_index);
 
@@ -1352,10 +1790,10 @@ void comp_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, 
    emit_label_def(one_label, s);
 }
 
-void int_const_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int> &locals, int &local_index) const
+void int_const_class::emit_ir(IRStatements& tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int> &locals, int &local_index) const
 {
    IntEntry* i = inttable.lookup_string(token->get_string());
-   tac_statements.push_back(IRStatement(IRLoad(IROperand(ACC), IRLabelOperand(get_int_const_ref(i)), IROperand(0))));
+   tac_statements.push_back(std::make_unique<IRLoad>(IROperand(ACC), IRLabelOperand(get_int_const_ref(i)), IROperand(0)));
 }
 
 void int_const_class::code(ostream& s, CgenNodeP cgen_node, SymbolTable<std::string, int>&, int&) const
@@ -1366,10 +1804,10 @@ void int_const_class::code(ostream& s, CgenNodeP cgen_node, SymbolTable<std::str
   emit_load_int(ACC,inttable.lookup_string(token->get_string()),s);
 }
 
-void string_const_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int> &locals, int &local_index) const
+void string_const_class::emit_ir(IRStatements& tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int> &locals, int &local_index) const
 {
    StringEntry* str = stringtable.lookup_string(token->get_string());
-   tac_statements.push_back(IRStatement(IRLoad(IROperand(ACC), IRLabelOperand(get_str_const_ref(str)), IROperand(0))));
+   tac_statements.push_back(std::make_unique<IRLoad>(IROperand(ACC), IRLabelOperand(get_str_const_ref(str)), IROperand(0)));
 }
 
 void string_const_class::code(ostream& s, CgenNodeP cgen_node, SymbolTable<std::string, int>&, int&) const
@@ -1377,9 +1815,9 @@ void string_const_class::code(ostream& s, CgenNodeP cgen_node, SymbolTable<std::
   emit_load_string(ACC,stringtable.lookup_string(token->get_string()),s);
 }
 
-void bool_const_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int> &locals, int &local_index) const
+void bool_const_class::emit_ir(IRStatements& tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int> &locals, int &local_index) const
 {
-   tac_statements.push_back(IRStatement(IRLoad(IROperand(ACC), IRLabelOperand(get_bool_const_ref(BoolConst(val))), IROperand(0))));
+   tac_statements.push_back(std::make_unique<IRLoad>(IROperand(ACC), IRLabelOperand(get_bool_const_ref(BoolConst(val))), IROperand(0)));
 }
 
 void bool_const_class::code(ostream& s, CgenNodeP cgen_node,  SymbolTable<std::string, int>&, int&) const
@@ -1387,7 +1825,7 @@ void bool_const_class::code(ostream& s, CgenNodeP cgen_node,  SymbolTable<std::s
   emit_load_bool(ACC, BoolConst(val), s);
 }
 
-void new__class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+void new__class::emit_ir(IRStatements& tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
 {
 }
 
@@ -1450,7 +1888,7 @@ void new__class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, 
    }
 }
 
-void isvoid_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+void isvoid_class::emit_ir(IRStatements& tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
 {
    e1->emit_ir(tac_statements, cgen_node, formals_table, local_index);
 
@@ -1462,13 +1900,13 @@ void isvoid_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP c
    std::stringstream one_label_def;
    emit_label_def(one_label, one_label_def);
 
-   IRRelOp eq_rel_op = IRRelOp(IROperand(NOT_SPECIFIED), IROperand(ACC), IROperand(ZERO), IRRelOp::Kind::IR_EQ);
-   tac_statements.push_back(IRIfJump(eq_rel_op, get_label_ref(zero_label)));
-   tac_statements.push_back(IRLoad(IROperand(ACC), IRLabelOperand(get_bool_const_ref(BoolConst(0))), IROperand(0)));
-   tac_statements.push_back(IRLableJump(get_label_ref(one_label)));
-   tac_statements.push_back(IRLabel(get_label_ref(zero_label)));
-   tac_statements.push_back(IRLoad(IROperand(ACC), IRLabelOperand(get_bool_const_ref(BoolConst(1))), IROperand(0)));
-   tac_statements.push_back(IRLabel(get_label_ref(one_label)));
+   IRRelOp eq_rel_op = IRRelOp(IROperand(ACC), IROperand(ZERO), IRRelOp::Kind::IR_EQ);
+   tac_statements.push_back(std::make_unique<IRIfJump>(eq_rel_op, get_label_ref(zero_label)));
+   tac_statements.push_back(std::make_unique<IRLoad>(IROperand(ACC), IRLabelOperand(get_bool_const_ref(BoolConst(0))), IROperand(0)));
+   tac_statements.push_back(std::make_unique<IRLabelJump>(get_label_ref(one_label)));
+   tac_statements.push_back(std::make_unique<IRLabel>(get_label_ref(zero_label)));
+   tac_statements.push_back(std::make_unique<IRLoad>(IROperand(ACC), IRLabelOperand(get_bool_const_ref(BoolConst(1))), IROperand(0)));
+   tac_statements.push_back(std::make_unique<IRLabel>(get_label_ref(one_label)));
 }
 
 void isvoid_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
@@ -1486,9 +1924,9 @@ void isvoid_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string
   emit_label_def(one_label, s);
 }
 
-void no_expr_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+void no_expr_class::emit_ir(IRStatements& tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
 {
-   tac_statements.push_back(IRStatement(IRLoad(IROperand(ACC), IROperand(0), IROperand(0))));
+   tac_statements.push_back(std::make_unique<IRLoad>(IROperand(ACC), IROperand(0), IROperand(0)));
 }
 
 void no_expr_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table,int& local_index) const
@@ -1497,23 +1935,23 @@ void no_expr_class::code(ostream &s, CgenNodeP cgen_node, SymbolTable<std::strin
   emit_load_imm(ACC, 0, s);
 }
 
-void object_class::emit_ir(std::vector<IRStatement> &tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
+void object_class::emit_ir(IRStatements& tac_statements, CgenNodeP cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const
 {
    if (name == self) 
    {
-      tac_statements.push_back(IRStatement(IRMove(IROperand(ACC), IROperand(SELF))));
+      tac_statements.push_back(std::make_unique<IRMove>(IROperand(ACC), IROperand(SELF)));
    }
    else if (formals_table.lookup(name->get_string()) != nullptr)
    {
       int* fp_offset = formals_table.lookup(name->get_string());
-      tac_statements.push_back(IRStatement(IRLoad(IROperand(ACC), IROperand(FP), *fp_offset)));
+      tac_statements.push_back(std::make_unique<IRLoad>(IROperand(ACC), IROperand(FP), *fp_offset));
    } 
    else
    {
       // else look for a matching attribute in the class
       int attribute_location = cgen_node->get_attribute_location(name);
       assert(attribute_location != -1);
-      tac_statements.push_back(IRStatement(IRLoad(IROperand(ACC), IROperand(SELF), DEFAULT_OBJFIELDS + attribute_location)));
+      tac_statements.push_back(std::make_unique<IRLoad>(IROperand(ACC), IROperand(SELF), DEFAULT_OBJFIELDS + attribute_location));
    }
 }
 

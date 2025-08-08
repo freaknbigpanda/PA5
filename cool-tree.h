@@ -99,7 +99,7 @@ public:
    Symbol get_type() { return type; }           
    Expression set_type(Symbol s) { type = s; return this; } 
    virtual void code(ostream& str, CgenNode* cgen_node, SymbolTable<std::string, int>&, int& local_index) const = 0; 
-   virtual void emit_ir(std::vector<IRStatement> &tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>&, int& local_index) const = 0;
+   virtual void emit_ir(IRStatements& tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>&, int& local_index) const = 0;
    virtual void dump_with_types(ostream&,int) = 0;  
    virtual int get_number_of_locals() const = 0;
    void dump_type(ostream&, int);               
@@ -118,7 +118,6 @@ public:
    virtual void dump_with_types(ostream& ,int) = 0;
    virtual int get_number_of_locals() const = 0;
 };
-
 
 // define the class for phylum - LIST
 // define list phlyum - Classes
@@ -268,6 +267,7 @@ public:
    int get_number_of_locals() const override;
 };
 
+using IRStatements = std::vector<std::unique_ptr<IRStatement>>;
 
 // define constructor - assign
 class assign_class : public Expression_class {
@@ -283,7 +283,7 @@ public:
    void dump(ostream& stream, int n);
 
    void code(ostream& str, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
-   void emit_ir(std::vector<IRStatement> &tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
+   void emit_ir(IRStatements& tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
    void dump_with_types(ostream&,int);
    int get_number_of_locals() const override;
 };
@@ -307,7 +307,7 @@ public:
    void dump(ostream& stream, int n);
 
    void code(ostream& str, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
-   void emit_ir(std::vector<IRStatement> &tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
+   void emit_ir(IRStatements& tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
    void dump_with_types(ostream&,int);
    int get_number_of_locals() const override;
 };
@@ -329,7 +329,7 @@ public:
    void dump(ostream& stream, int n);
 
    void code(ostream& str, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
-   void emit_ir(std::vector<IRStatement> &tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
+   void emit_ir(IRStatements& tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
    void dump_with_types(ostream&,int);
    int get_number_of_locals() const override;
 };
@@ -351,7 +351,7 @@ public:
    void dump(ostream& stream, int n);
 
    void code(ostream& str, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
-   void emit_ir(std::vector<IRStatement> &tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
+   void emit_ir(IRStatements& tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
    void dump_with_types(ostream&,int);
    int get_number_of_locals() const override;
 };
@@ -371,7 +371,7 @@ public:
    void dump(ostream& stream, int n);
 
    void code(ostream& str, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
-   void emit_ir(std::vector<IRStatement> &tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
+   void emit_ir(IRStatements& tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
    void dump_with_types(ostream&,int);
    int get_number_of_locals() const override;
 };
@@ -391,7 +391,7 @@ public:
    void dump(ostream& stream, int n);
 
    void code(ostream& str, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
-   void emit_ir(std::vector<IRStatement> &tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
+   void emit_ir(IRStatements& tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
    void dump_with_types(ostream&,int);
    int get_number_of_locals() const override;
 };
@@ -409,7 +409,7 @@ public:
    void dump(ostream& stream, int n);
 
    void code(ostream& str, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
-   void emit_ir(std::vector<IRStatement> &tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
+   void emit_ir(IRStatements& tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
    void dump_with_types(ostream&,int);
    int get_number_of_locals() const override;
 };
@@ -433,7 +433,7 @@ public:
    void dump(ostream& stream, int n);
 
    void code(ostream& str, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
-   void emit_ir(std::vector<IRStatement> &tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
+   void emit_ir(IRStatements& tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
    void dump_with_types(ostream&,int);
    int get_number_of_locals() const override;
 };
@@ -453,7 +453,7 @@ public:
    void dump(ostream& stream, int n);
 
    void code(ostream& str, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
-   void emit_ir(std::vector<IRStatement> &tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
+   void emit_ir(IRStatements& tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
    void dump_with_types(ostream&,int);
    int get_number_of_locals() const override;
 };
@@ -473,7 +473,7 @@ public:
    void dump(ostream& stream, int n);
 
    void code(ostream& str, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
-   void emit_ir(std::vector<IRStatement> &tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
+   void emit_ir(IRStatements& tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
    void dump_with_types(ostream&,int);
    int get_number_of_locals() const override;
 };
@@ -493,7 +493,7 @@ public:
    void dump(ostream& stream, int n);
 
    void code(ostream& str, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
-   void emit_ir(std::vector<IRStatement> &tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
+   void emit_ir(IRStatements& tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
    void dump_with_types(ostream&,int);
    int get_number_of_locals() const override;
 };
@@ -513,7 +513,7 @@ public:
    void dump(ostream& stream, int n);
 
    void code(ostream& str, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
-   void emit_ir(std::vector<IRStatement> &tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
+   void emit_ir(IRStatements& tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
    void dump_with_types(ostream&,int);
    int get_number_of_locals() const override;
 };
@@ -531,7 +531,7 @@ public:
    void dump(ostream& stream, int n);
 
    void code(ostream& str, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
-   void emit_ir(std::vector<IRStatement> &tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
+   void emit_ir(IRStatements& tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
    void dump_with_types(ostream&,int);
    int get_number_of_locals() const override;
 };
@@ -551,7 +551,7 @@ public:
    void dump(ostream& stream, int n);
 
    void code(ostream& str, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
-   void emit_ir(std::vector<IRStatement> &tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
+   void emit_ir(IRStatements& tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
    void dump_with_types(ostream&,int);
    int get_number_of_locals() const override;
 };
@@ -571,7 +571,7 @@ public:
    void dump(ostream& stream, int n);
 
    void code(ostream& str, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
-   void emit_ir(std::vector<IRStatement> &tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
+   void emit_ir(IRStatements& tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
    void dump_with_types(ostream&,int);
    int get_number_of_locals() const override;
 };
@@ -591,7 +591,7 @@ public:
    void dump(ostream& stream, int n);
 
    void code(ostream& str, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
-   void emit_ir(std::vector<IRStatement> &tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
+   void emit_ir(IRStatements& tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
    void dump_with_types(ostream&,int);
    int get_number_of_locals() const override;
 };
@@ -609,7 +609,7 @@ public:
    void dump(ostream& stream, int n);
 
    void code(ostream& str, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
-   void emit_ir(std::vector<IRStatement> &tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
+   void emit_ir(IRStatements& tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
    void dump_with_types(ostream&,int);
    int get_number_of_locals() const override;
 };
@@ -627,7 +627,7 @@ public:
    void dump(ostream& stream, int n);
 
    void code(ostream& str, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
-   void emit_ir(std::vector<IRStatement> &tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
+   void emit_ir(IRStatements& tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
    void dump_with_types(ostream&,int);
    int get_number_of_locals() const override;
 };
@@ -645,7 +645,7 @@ public:
    void dump(ostream& stream, int n);
 
    void code(ostream& str, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
-   void emit_ir(std::vector<IRStatement> &tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
+   void emit_ir(IRStatements& tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
    void dump_with_types(ostream&,int);
    int get_number_of_locals() const override;
 };
@@ -663,7 +663,7 @@ public:
    void dump(ostream& stream, int n);
 
    void code(ostream& str, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
-   void emit_ir(std::vector<IRStatement> &tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
+   void emit_ir(IRStatements& tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
    void dump_with_types(ostream&,int);
    int get_number_of_locals() const override;
 };
@@ -681,7 +681,7 @@ public:
    void dump(ostream& stream, int n);
 
    void code(ostream& str, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
-   void emit_ir(std::vector<IRStatement> &tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
+   void emit_ir(IRStatements& tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
    void dump_with_types(ostream&,int);
    int get_number_of_locals() const override;
 };
@@ -699,7 +699,7 @@ public:
    void dump(ostream& stream, int n);
 
    void code(ostream& str, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
-   void emit_ir(std::vector<IRStatement> &tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
+   void emit_ir(IRStatements& tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
    void dump_with_types(ostream&,int);
    int get_number_of_locals() const override;
 };
@@ -715,7 +715,7 @@ public:
    void dump(ostream& stream, int n);
 
    void code(ostream& str, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
-   void emit_ir(std::vector<IRStatement> &tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
+   void emit_ir(IRStatements& tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
    void dump_with_types(ostream&,int);
    int get_number_of_locals() const override;
 };
@@ -733,7 +733,7 @@ public:
    void dump(ostream& stream, int n);
 
    void code(ostream& str, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
-   void emit_ir(std::vector<IRStatement> &tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
+   void emit_ir(IRStatements& tac_statements, CgenNode* cgen_node, SymbolTable<std::string, int>& formals_table, int& local_index) const override;
    void dump_with_types(ostream&,int);
    int get_number_of_locals() const override;
 };

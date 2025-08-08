@@ -178,3 +178,10 @@ void emit_gc_check(char *source, ostream &s);
 #define CALLEE_SAVES_SIZE 3 // Number of callee saves we do in words
 void emit_callee_saves(ostream &str);
 void emit_callee_restores(ostream &str, int num_params);
+
+std::string get_label_ref(int label_index);
+std::string get_label_def(int label_index);
+std::string get_bool_const_ref(const BoolConst& b);
+std::string get_str_const_ref(StringEntry *str);
+std::string get_int_const_ref(IntEntry *i); 
+std::string get_protobj_ref(Symbol sym);

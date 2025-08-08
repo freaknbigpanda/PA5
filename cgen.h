@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <map>
 #include <vector>
+#include <memory>
 #include "emit.h"
 #include "cool-tree.h"
 #include "symtab.h"
@@ -27,6 +28,7 @@ typedef CgenClassTable *CgenClassTableP;
 
 class CgenNode;
 typedef CgenNode *CgenNodeP;
+using IRStatements = std::vector<std::unique_ptr<IRStatement>>;
 using CgenNodeMap = std::map<int, CgenNodeP>;
 using ClassNameToTagMap = std::map<Symbol, int>;
 
@@ -34,7 +36,7 @@ class CgenClassTable : public SymbolTable<Symbol,CgenNode> {
 private:
    List<CgenNode> *code_gen_classes;
    ostream& str;
-   std::vector<IRStatement> tac_statements;
+   IRStatements tac_statements;
    int lastclasstag;
    CgenNodeMap cgen_nodes_for_tag;
    ClassNameToTagMap class_tag_for_name;
@@ -53,8 +55,9 @@ private:
    void code_inheritance_table();
    void code_class_tag_table();
    void code_dispatch_table();
-   void generate_init_ir();
+   void emit_object_init_ir();
    void code_object_initializers();
+   void emit_object_method_ir();
    void code_object_methods();
 
    // The following creates an inheritance graph from
@@ -70,6 +73,8 @@ private:
 public:
    CgenClassTable(Classes, ostream& str);
    void code();
+   // todo: make this an option that you can specify on the command line
+   void dump_ir();
    int get_next_class_tag(Symbol class_name);
    int get_tag_for_name(Symbol class_name) const;
    CgenNodeMap get_cgen_node_map() const { return cgen_nodes_for_tag; }

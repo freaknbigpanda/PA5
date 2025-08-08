@@ -391,6 +391,7 @@ CgenClassTable::CgenClassTable(Classes classes, ostream& s) : code_gen_classes(N
   install_classes(classes);
   build_inheritance_tree();
   code();
+  dump_ir();
   exitscope();
 }
 
@@ -523,24 +524,24 @@ void CgenClassTable::code_dispatch_table()
   }
 }
 
-void CgenClassTable::generate_init_ir()
+void CgenClassTable::emit_object_init_ir()
 {
   for(auto it = cgen_nodes_for_tag.cbegin(); it != cgen_nodes_for_tag.cend(); ++it)
   {
     CgenNode* current_node_ptr = (*it).second;
-    tac_statements.push_back(IRLabel(std::string(current_node_ptr->name->get_string()) + CLASSINIT_SUFFIX));
+    tac_statements.push_back(std::make_unique<IRLabel>(std::string(current_node_ptr->name->get_string()) + CLASSINIT_SUFFIX));
     
     append_ir_callee_saves(tac_statements);
 
     // Save the value of self into register S0
     // note that init is *always* called after Object.copy which leaves a copy of the proto-object in ACC
-    tac_statements.push_back(IRMove(IROperand(SELF), IROperand(ACC)));
+    tac_statements.push_back(std::make_unique<IRMove>(IROperand(SELF), IROperand(ACC)));
     
     if (current_node_ptr->name != Object)
     {
       std::stringstream init_ref;
       emit_init_ref(current_node_ptr->parent, init_ref);
-      tac_statements.push_back(IRLableJump(init_ref.str()));
+      tac_statements.push_back(std::make_unique<IRLabelJump>(init_ref.str()));
     }
 
     // Initializing attributes
@@ -561,12 +562,8 @@ void CgenClassTable::generate_init_ir()
         // If we don't have an expression init the attribute to the value of the appropiate proto obj
         // Load the proto object address into ACC
         // Note that for non-basic types we just let them initialize to void
-        emit_partial_load_address(ACC, str);
-        emit_protobj_ref(attr_type, str);
-        str << endl;
-        
         std::string protoObjRef = std::string(attr_type->get_string()) + PROTOBJ_SUFFIX;
-        tac_statements.push_back(IRLoad(IROperand(ACC), IRLabelOperand(protoObjRef), IROperand(0)));
+        tac_statements.push_back(std::make_unique<IRLoad>(IROperand(ACC), IRLabelOperand(protoObjRef), IROperand(0)));
 
         append_ir_object_copy(tac_statements);
       }
@@ -588,13 +585,12 @@ void CgenClassTable::generate_init_ir()
 
       // Store the result of the attribute initialization in the correct location in the heap
       int attribute_index = current_node_ptr->get_attribute_location(attribute->name);
-      tac_statements.push_back(IRStore(IROperand(SELF), IROperand(ACC), IROperand(attribute_index + DEFAULT_OBJFIELDS)));
+      tac_statements.push_back(std::make_unique<IRStore>(IROperand(SELF), IROperand(ACC), IROperand(attribute_index + DEFAULT_OBJFIELDS)));
     }
 
     // $a0 is callee saved for the init methods so restore the value of self back to register $a0 before the method exits
-    tac_statements.push_back(IRMove(IROperand(ACC), IROperand(SELF)));
+    tac_statements.push_back(std::make_unique<IRMove>(IROperand(ACC), IROperand(SELF)));
 
-    emit_callee_restores(str, 0);
     append_ir_callee_restores(tac_statements, 0);
   }
 }
@@ -669,6 +665,59 @@ void CgenClassTable::code_object_initializers()
     emit_move(ACC, SELF, str);
 
     emit_callee_restores(str, 0);
+  }
+}
+
+void CgenClassTable::emit_object_method_ir()
+{
+  for (auto it = cgen_nodes_for_tag.cbegin(); it != cgen_nodes_for_tag.cend(); ++it)
+  {
+      CgenNode* current_node_ptr = (*it).second;
+      // Skip basic classes (Object, IO, Int, Bool, Str, etc.)
+      if (current_node_ptr->basic()) continue;
+
+      std::vector<MethodOwnerPair> methods = current_node_ptr->get_methods();
+      for (auto mit = methods.cbegin(); mit != methods.cend(); ++mit)
+      {
+          // Only emit methods defined in this class (not inherited)
+          if ((*mit).second != current_node_ptr->name) continue;
+
+          method_class* method = (*mit).first;
+          // Emit method label
+          tac_statements.push_back(std::make_unique<IRLabel>(
+              std::string(current_node_ptr->name->get_string()) + METHOD_SEP + method->name->get_string()
+          ));
+
+          // Callee saves
+          append_ir_callee_saves(tac_statements);
+
+          // Save self (in ACC) to SELF register
+          tac_statements.push_back(std::make_unique<IRMove>(IROperand(SELF), IROperand(ACC)));
+
+          // Set up formals table for parameters
+          SymbolTable<std::string, int> formals_table;
+          formals_table.enterscope();
+          Formals parameters = method->formals;
+          for (int i = parameters->first(); parameters->more(i); i = parameters->next(i))
+          {
+              int* fp_offset = new int;
+              *fp_offset = parameters->len() - i;
+              formals_table.addid(parameters->nth(i)->get_name()->get_string(), fp_offset);
+          }
+
+          // Allocate space for local variables
+          int total_local_vars = method->expr->get_number_of_locals();
+          append_ir_stack_size_push(tac_statements, total_local_vars);
+
+          int local_var_index = CALLEE_SAVES_SIZE;
+          method->expr->emit_ir(tac_statements, current_node_ptr, formals_table, local_var_index);
+          formals_table.exitscope();
+
+          append_ir_stack_size_pop(tac_statements, total_local_vars);
+
+          // Callee restores
+          append_ir_callee_restores(tac_statements, parameters->len());
+    }
   }
 }
 
@@ -1033,11 +1082,24 @@ void CgenClassTable::code()
   if (cgen_debug) cout << "coding global text" << endl;
   code_global_text();
 
+  if (cgen_debug) cout << "emitting object init IR" << endl;
+  emit_object_init_ir();
+
   if (cgen_debug) cout << "coding object initializers" << endl;
   code_object_initializers();
 
+  if (cgen_debug) cout << "emitting object method IR" << endl;
+  emit_object_method_ir();
+
   if (cgen_debug) cout << "coding object methods" << endl;
   code_object_methods();
+}
+
+void CgenClassTable::dump_ir()
+{
+  for (const auto& statement : tac_statements) {
+    std::cout << *statement << std::endl;
+  }
 }
 
 int CgenClassTable::get_next_class_tag(Symbol class_name)

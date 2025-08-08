@@ -1,3 +1,4 @@
+#include <sstream>
 #include "emit.h"
 #include "cgen.h"
 #include "cgen_gc.h"
@@ -276,4 +277,46 @@ void emit_callee_restores(ostream &str, int num_params)
   emit_load(RA, 1, SP, str);
   emit_stack_size_pop(CALLEE_SAVES_SIZE + num_params, str);
   emit_return(str);
+}
+
+std::string get_label_ref(int label_index)
+{
+  std::stringstream label_ref;
+  label_ref << "L" << label_index;
+  return label_ref.str();
+}
+
+std::string get_label_def(int label_index)
+{
+  std::stringstream label_def;
+  label_def << "L" << label_index;
+  return label_def.str();
+}
+
+std::string get_bool_const_ref(const BoolConst& b)
+{
+  std::stringstream bool_ref;
+  b.code_ref(bool_ref);
+  return bool_ref.str();
+}
+
+std::string get_str_const_ref(StringEntry *str)
+{
+  std::stringstream str_ref;
+  str->code_ref(str_ref);
+  return str_ref.str();
+}
+
+std::string get_int_const_ref(IntEntry *i)
+{
+  std::stringstream int_ref;
+  i->code_ref(int_ref);
+  return int_ref.str();
+}
+
+std::string get_protobj_ref(Symbol sym)
+{
+  std::stringstream protobj_ref;
+  emit_protobj_ref(sym, protobj_ref);
+  return protobj_ref.str();
 }

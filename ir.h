@@ -2,10 +2,9 @@
 
 #include <string>
 #include <vector>
+#include <memory>
 #include <limits>
 #include <iostream>
-
-#define NOT_SPECIFIED "not_specified" // sometimes we don't need to specify a dst register in the conditional branch instructions
 
 // Note that IR Operands can only write to registers and can read from registers or immediate values.
 struct IROperand {
@@ -14,7 +13,24 @@ struct IROperand {
     int64_t immValue = std::numeric_limits<int64_t>::min();
     IROperand(const std::string& val) : kind(Kind::REG), strValue(val) {};
     IROperand(int64_t val) : kind(Kind::IMM), immValue(val) {};
+
+    virtual void print(std::ostream& os) const {
+        if (immValue != std::numeric_limits<int64_t>::min()) {
+            os << immValue;
+        } else if (strValue != "") {
+            os << strValue;
+        } else {
+            abort(); // operands should always have a value
+        }
+    }
+
+    friend std::ostream& operator<< (std::ostream& os, const IROperand& op);
 };
+
+inline std::ostream& operator<< (std::ostream& os, const IROperand& op) {
+    op.print(os);
+    return os;
+}
 
 struct IRLabelOperand : IROperand {
     IRLabelOperand(const std::string& label) : IROperand(label) {
@@ -28,83 +44,161 @@ class IRStatement {
     // code to mips asm
     // todo: make this pure virtual
     void code(std::ostream& s);
+    friend std::ostream& operator<< (std::ostream& os, const IRStatement& stm);
+
+    protected:
+    bool should_indent = true;
+    virtual void print(std::ostream& os) const {
+        os << "no print function defined";
+    }
 };
+
+inline std::ostream& operator<< (std::ostream& os, const IRStatement& stm) {
+    if (stm.should_indent) {
+        os << "    ";
+    }
+    stm.print(os); 
+    return os;
+}
 
 class IRBinaryOp : public IRStatement {
     public:
     IROperand lhs;
     IROperand rhs;
     IROperand dst;
+    std::string op_char = "";
 
     protected:
     IRBinaryOp(const IROperand& d, const IROperand& l, const IROperand& r)
         : lhs(l), rhs(r), dst(d) {}
+
+    void print(std::ostream& os) const override {
+        os << dst << " = " << lhs << " " << op_char << " " << rhs;
+    }
 };
 
 class IRUnaryOp : public IRStatement {
     public:
     IROperand rhs;
     IROperand dst;
+    std::string op_char = "";
 
     protected:
     IRUnaryOp(const IROperand& d, const IROperand& r)
         : rhs(r), dst(d) {}
+
+    virtual void print(std::ostream& os) const override {
+        os << dst << " = " << op_char << " " << rhs;
+    }
 };
 
 class IRRelOp : public IRBinaryOp {
     public:
-    enum class Kind { UNINITIALIZED, IR_LT, IR_LEQ, IR_EQ } kind = Kind::UNINITIALIZED;
-    IRRelOp(const IROperand& d, const IROperand& l, const IROperand& r, IRRelOp::Kind k) 
-        : IRBinaryOp(d, l, r), kind(k) {} 
+    enum class Kind { UNINITIALIZED, IR_LT, IR_LEQ, IR_EQ, IR_NEQ } kind = Kind::UNINITIALIZED;
+    IRRelOp(const IROperand& l, const IROperand& r, IRRelOp::Kind k) 
+        : IRBinaryOp(IROperand(std::numeric_limits<int64_t>::min()), l, r), kind(k) { set_op_char(); }
+    IRRelOp(const IROperand& dst, const IROperand& l, const IROperand& r, IRRelOp::Kind k) 
+        : IRBinaryOp(dst, l, r), kind(k) { set_op_char(); }  
+    
+    protected:
+    void print(std::ostream& os) const override {
+        // this means that the dst register is unused 
+        if (dst.immValue == std::numeric_limits<int64_t>::min()) {
+            os << lhs << " " << op_char << " " << rhs;
+        } else {
+            IRBinaryOp::print(os);
+        }
+    }
+
+    private:
+    void set_op_char() {
+        should_indent = false;
+        switch (kind)
+        {
+        case Kind::UNINITIALIZED:
+            abort();
+            break;
+        case Kind::IR_LT:
+            op_char = "<";
+            break;
+        case Kind::IR_LEQ:
+            op_char = "<=";
+            break;
+        case Kind::IR_EQ:
+            op_char = "==";
+            break;
+        case Kind::IR_NEQ:
+            op_char = "!=";
+            break;
+
+        default:
+            break;
+        }
+    }
 };
 
 class IRMove : public IRUnaryOp {
     public:
     IRMove(const IROperand& d, const IROperand& r)
-        : IRUnaryOp(d, r) {}
+        : IRUnaryOp(d, r) { }
+
+    protected:
+    virtual void print(std::ostream& os) const override {
+        os << dst << " = " << rhs;
+    }
 };
 
-class IRPlus : public IRBinaryOp {
+class IRAdd : public IRBinaryOp {
     public:
-    IRPlus(const IROperand& d, const IROperand& l, const IROperand& r)
-        : IRBinaryOp(d, l, r) {}
+    IRAdd(const IROperand& d, const IROperand& l, const IROperand& r)
+        : IRBinaryOp(d, l, r) { op_char = "+"; }
 };
 
 class IRSub : public IRBinaryOp {
     public:
     IRSub(const IROperand& d, const IROperand& l, const IROperand& r)
-        : IRBinaryOp(d, l, r) {}
+        : IRBinaryOp(d, l, r) { op_char = "-"; }
 };
 
 class IRMul : public IRBinaryOp {
     public:
     IRMul(const IROperand& d, const IROperand& l, const IROperand& r)
-        : IRBinaryOp(d, l, r) {}
+        : IRBinaryOp(d, l, r) { op_char = "*"; }
 };
 
 class IRDiv : public IRBinaryOp {
     public:
     IRDiv(const IROperand& d, const IROperand& l, const IROperand& r)
-        : IRBinaryOp(d, l, r) {}
+        : IRBinaryOp(d, l, r) { op_char = "/"; }
 };
 
 class IRNeg : public IRUnaryOp {
     public:
     IRNeg(const IROperand& d, const IROperand& r)
-        : IRUnaryOp(d, r) {}
+        : IRUnaryOp(d, r) { op_char = "~"; }
 };
 
 class IRAssign : public IRUnaryOp {
     public:
     IRAssign(const IROperand& d, const IROperand& r)
         : IRUnaryOp(d, r) {}
+
+    protected:
+    virtual void print(std::ostream& os) const override {
+        os << dst << " = " << rhs;
+    }
 };
 
 class IRLabel : public IRStatement {
     public:
     IRLabelOperand label;
 
-    IRLabel(const std::string& lbl) : label(lbl) {}
+    IRLabel(const std::string& lbl) : label(lbl) { should_indent = false; }
+
+    protected:
+    virtual void print(std::ostream& os) const override {
+        os << label << ":";
+    }
 };
 
 class IRRegJump : public IRStatement {
@@ -112,13 +206,35 @@ class IRRegJump : public IRStatement {
     IROperand dst;
 
     IRRegJump(const std::string& reg) : dst(reg) {}
+
+    protected:
+    virtual void print(std::ostream& os) const override {
+        os << "JUMP " << dst;
+    }
 };
 
-class IRLableJump : public IRStatement {
+class IRRegJumpAndLink : public IRStatement {
+    public:
+    IROperand dst;
+
+    IRRegJumpAndLink(const std::string& reg) : dst(reg) {}
+
+    protected:
+    virtual void print(std::ostream& os) const override {
+        os << "JUMP AND LINK " << dst;
+    }
+};
+
+class IRLabelJump : public IRStatement {
     public:
     IRLabelOperand labelDst;
 
-    IRLableJump(const std::string& label) : labelDst(IRLabelOperand(label)) {}
+    IRLabelJump(const std::string& label) : labelDst(IRLabelOperand(label)) {}
+
+    protected:
+    virtual void print(std::ostream& os) const override {
+        os << "JUMP " << labelDst;
+    }
 };
 
 class IRLabelJumpAndLink : public IRStatement {
@@ -126,15 +242,25 @@ class IRLabelJumpAndLink : public IRStatement {
     IRLabelOperand labelDst;
 
     IRLabelJumpAndLink(const std::string& label) : labelDst(IRLabelOperand(label)) {}
+
+    protected:
+    virtual void print(std::ostream& os) const override {
+        os << "JUMP AND LINK " << labelDst;
+    }
 };
 
 class IRIfJump : public IRStatement {
     public:
-    IRStatement condition;
+    IRRelOp condition;
     IRLabelOperand labelDst;
 
     IRIfJump(const IRRelOp& cond, const std::string& lbl)
         : condition(cond), labelDst(IRLabelOperand(lbl)) {}
+
+    protected:
+    virtual void print(std::ostream& os) const override {
+        os << "IF " << condition << " JUMP " << labelDst;
+    }
 };
 
 class IRMemOP : public IRBinaryOp {
@@ -156,6 +282,11 @@ class IRLoad : public IRMemOP {
     : IRMemOP(d, s, offset) {
         kind = IRMemOP::Kind::LOAD;
     }
+
+    protected:
+    virtual void print(std::ostream& os) const override {
+        os << dst << " <- (" << rhs << ")" << lhs;
+    }
 };
 
 class IRStore : public IRMemOP {
@@ -167,16 +298,16 @@ class IRStore : public IRMemOP {
     : IRMemOP(d, s, offset) {
         kind = IRMemOP::Kind::STORE;
     }
+
+    protected:
+    virtual void print(std::ostream& os) const override {
+        os << "(" <<  rhs << ")" << dst << " <- " << lhs;
+    }
 };
 
-void append_ir_callee_saves(std::vector<IRStatement>& statments);
-void append_ir_callee_restores(std::vector<IRStatement>& statments, int parameter_count);
-void append_ir_stack_size_push(std::vector<IRStatement>& statements, int num_words);
-void append_ir_stack_size_pop(std::vector<IRStatement>& statements, int num_words);
-void append_ir_object_copy(std::vector<IRStatement>& statements);
-std::string get_label_ref(int label_index);
-std::string get_label_def(int label_index);
-class BoolConst; class StringEntry; class IntEntry; 
-std::string get_bool_const_ref(const BoolConst& b);
-std::string get_str_const_ref(StringEntry *str);
-std::string get_int_const_ref(IntEntry *i); 
+using IRStatements = std::vector<std::unique_ptr<IRStatement>>;
+void append_ir_callee_saves(IRStatements& statments);
+void append_ir_callee_restores(IRStatements& statments, int parameter_count);
+void append_ir_stack_size_push(IRStatements& statements, int num_words);
+void append_ir_stack_size_pop(IRStatements& statements, int num_words);
+void append_ir_object_copy(IRStatements& statements);
