@@ -42,8 +42,7 @@ class IRStatement {
     public:
 
     // code to mips asm
-    // todo: make this pure virtual
-    void code(std::ostream& s);
+    virtual void code(std::ostream& s) = 0;
     friend std::ostream& operator<< (std::ostream& os, const IRStatement& stm);
 
     protected:
@@ -100,6 +99,8 @@ class IRRelOp : public IRBinaryOp {
     IRRelOp(const IROperand& dst, const IROperand& l, const IROperand& r, IRRelOp::Kind k) 
         : IRBinaryOp(dst, l, r), kind(k) { set_op_char(); }  
     
+    void code(std::ostream& s) override;
+
     protected:
     void print(std::ostream& os) const override {
         // this means that the dst register is unused 
@@ -138,126 +139,152 @@ class IRRelOp : public IRBinaryOp {
 };
 
 class IRMove : public IRUnaryOp {
-    public:
+public:
     IRMove(const IROperand& d, const IROperand& r)
         : IRUnaryOp(d, r) { }
 
-    protected:
+    void code(std::ostream& s) override;
+
+protected:
     virtual void print(std::ostream& os) const override {
         os << dst << " = " << rhs;
     }
 };
 
 class IRAdd : public IRBinaryOp {
-    public:
+public:
     IRAdd(const IROperand& d, const IROperand& l, const IROperand& r)
         : IRBinaryOp(d, l, r) { op_char = "+"; }
+
+    void code(std::ostream& s) override;
 };
 
 class IRSub : public IRBinaryOp {
-    public:
+public:
     IRSub(const IROperand& d, const IROperand& l, const IROperand& r)
         : IRBinaryOp(d, l, r) { op_char = "-"; }
+
+    void code(std::ostream& s) override;
 };
 
 class IRMul : public IRBinaryOp {
-    public:
+public:
     IRMul(const IROperand& d, const IROperand& l, const IROperand& r)
         : IRBinaryOp(d, l, r) { op_char = "*"; }
+
+    void code(std::ostream& s) override;
 };
 
 class IRDiv : public IRBinaryOp {
-    public:
+public:
     IRDiv(const IROperand& d, const IROperand& l, const IROperand& r)
         : IRBinaryOp(d, l, r) { op_char = "/"; }
+
+    void code(std::ostream& s) override;
 };
 
 class IRNeg : public IRUnaryOp {
-    public:
+public:
     IRNeg(const IROperand& d, const IROperand& r)
         : IRUnaryOp(d, r) { op_char = "~"; }
+
+    void code(std::ostream& s) override;
 };
 
 class IRAssign : public IRUnaryOp {
-    public:
+public:
     IRAssign(const IROperand& d, const IROperand& r)
         : IRUnaryOp(d, r) {}
 
-    protected:
+    void code(std::ostream& s) override;
+
+protected:
     virtual void print(std::ostream& os) const override {
         os << dst << " = " << rhs;
     }
 };
 
 class IRLabel : public IRStatement {
-    public:
+public:
     IRLabelOperand label;
 
     IRLabel(const std::string& lbl) : label(lbl) { should_indent = false; }
 
-    protected:
+    void code(std::ostream& s) override;
+
+protected:
     virtual void print(std::ostream& os) const override {
         os << label << ":";
     }
 };
 
 class IRRegJump : public IRStatement {
-    public:
+public:
     IROperand dst;
 
     IRRegJump(const std::string& reg) : dst(reg) {}
 
-    protected:
+    void code(std::ostream& s) override;
+
+protected:
     virtual void print(std::ostream& os) const override {
         os << "JUMP " << dst;
     }
 };
 
 class IRRegJumpAndLink : public IRStatement {
-    public:
+public:
     IROperand dst;
 
     IRRegJumpAndLink(const std::string& reg) : dst(reg) {}
 
-    protected:
+    void code(std::ostream& s) override;
+
+protected:
     virtual void print(std::ostream& os) const override {
         os << "JUMP AND LINK " << dst;
     }
 };
 
 class IRLabelJump : public IRStatement {
-    public:
+public:
     IRLabelOperand labelDst;
 
     IRLabelJump(const std::string& label) : labelDst(IRLabelOperand(label)) {}
 
-    protected:
+    void code(std::ostream& s) override;
+
+protected:
     virtual void print(std::ostream& os) const override {
         os << "JUMP " << labelDst;
     }
 };
 
 class IRLabelJumpAndLink : public IRStatement {
-    public:
+public:
     IRLabelOperand labelDst;
 
     IRLabelJumpAndLink(const std::string& label) : labelDst(IRLabelOperand(label)) {}
 
-    protected:
+    void code(std::ostream& s) override;
+
+protected:
     virtual void print(std::ostream& os) const override {
         os << "JUMP AND LINK " << labelDst;
     }
 };
 
 class IRIfJump : public IRStatement {
-    public:
+public:
     IRRelOp condition;
     IRLabelOperand labelDst;
 
     IRIfJump(const IRRelOp& cond, const std::string& lbl)
         : condition(cond), labelDst(IRLabelOperand(lbl)) {}
 
-    protected:
+    void code(std::ostream& s) override;
+
+protected:
     virtual void print(std::ostream& os) const override {
         os << "IF " << condition << " JUMP " << labelDst;
     }
@@ -269,6 +296,10 @@ class IRMemOP : public IRBinaryOp {
     
     IRMemOP(const IROperand& d, const IROperand& s, const IROperand& offset)
         : IRBinaryOp(d, s, offset) {}
+
+    IROperand get_dst() const { return dst; }
+    IROperand get_src() const { return lhs; }
+    IROperand get_offset() const { return rhs; }
 };
 
 class IRLoad : public IRMemOP {
@@ -279,11 +310,13 @@ class IRLoad : public IRMemOP {
     // offset is an offset applied to the src register to determine the address to write to
 
     IRLoad(const IROperand& d, const IROperand& s, const IROperand& offset) 
-    : IRMemOP(d, s, offset) {
+        : IRMemOP(d, s, offset) {
         kind = IRMemOP::Kind::LOAD;
     }
 
-    protected:
+    void code(std::ostream& s) override;
+
+protected:
     virtual void print(std::ostream& os) const override {
         os << dst << " <- (" << rhs << ")" << lhs;
     }
@@ -295,11 +328,13 @@ class IRStore : public IRMemOP {
     // src must be a register that stores the 32 bits to write to dest
     // offset is an offset applied to the dst register to determine the address to write to
     IRStore(const IROperand& d, const IROperand& s, const IROperand& offset) 
-    : IRMemOP(d, s, offset) {
+        : IRMemOP(d, s, offset) {
         kind = IRMemOP::Kind::STORE;
     }
 
-    protected:
+    void code(std::ostream& s) override;
+
+protected:
     virtual void print(std::ostream& os) const override {
         os << "(" <<  rhs << ")" << dst << " <- " << lhs;
     }

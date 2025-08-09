@@ -32,6 +32,7 @@
 
 extern void emit_string_constant(ostream& str, char *s);
 extern int cgen_debug;
+extern int cgen_optimize;
 
 //
 // Three symbols from the semantic analyzer (semant.cc) are used.
@@ -381,8 +382,6 @@ void CgenClassTable::code_constants()
   code_bools(get_tag_for_name(Bool));
 }
 
-
-
 CgenClassTable::CgenClassTable(Classes classes, ostream& s) : code_gen_classes(NULL) , str(s)
 {
   enterscope();
@@ -391,7 +390,11 @@ CgenClassTable::CgenClassTable(Classes classes, ostream& s) : code_gen_classes(N
   install_classes(classes);
   build_inheritance_tree();
   code();
-  dump_ir();
+  if (cgen_debug && cgen_optimize) 
+  {
+    cout << "dumping IR" << endl;
+    dump_ir();
+  }
   exitscope();
 }
 
@@ -539,9 +542,7 @@ void CgenClassTable::emit_object_init_ir()
     
     if (current_node_ptr->name != Object)
     {
-      std::stringstream init_ref;
-      emit_init_ref(current_node_ptr->parent, init_ref);
-      tac_statements.push_back(std::make_unique<IRLabelJump>(init_ref.str()));
+      tac_statements.push_back(std::make_unique<IRLabelJumpAndLink>(get_init_ref(current_node_ptr->parent)));
     }
 
     // Initializing attributes
@@ -1082,23 +1083,38 @@ void CgenClassTable::code()
   if (cgen_debug) cout << "coding global text" << endl;
   code_global_text();
 
-  if (cgen_debug) cout << "emitting object init IR" << endl;
-  emit_object_init_ir();
+  if (cgen_optimize) 
+  {
+    if (cgen_debug) cout << "emitting object init IR" << endl;
+    emit_object_init_ir();
 
-  if (cgen_debug) cout << "coding object initializers" << endl;
-  code_object_initializers();
+    if (cgen_debug) cout << "emitting object method IR" << endl;
+    emit_object_method_ir();
 
-  if (cgen_debug) cout << "emitting object method IR" << endl;
-  emit_object_method_ir();
+    if (cgen_debug) cout << "coding from IR" << endl;
+    emit_asm_from_ir();
+  }
+  else
+  {
+    if (cgen_debug) cout << "coding object initializers" << endl;
+    code_object_initializers();
 
-  if (cgen_debug) cout << "coding object methods" << endl;
-  code_object_methods();
+    if (cgen_debug) cout << "coding object methods" << endl;
+    code_object_methods();
+  }
 }
 
-void CgenClassTable::dump_ir()
+void CgenClassTable::dump_ir() const
 {
   for (const auto& statement : tac_statements) {
     std::cout << *statement << std::endl;
+  }
+}
+
+void CgenClassTable::emit_asm_from_ir() const 
+{
+  for (const auto& statement : tac_statements) {
+    statement->code(str);
   }
 }
 

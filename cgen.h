@@ -74,7 +74,8 @@ public:
    CgenClassTable(Classes, ostream& str);
    void code();
    // todo: make this an option that you can specify on the command line
-   void dump_ir();
+   void dump_ir() const;
+   void emit_asm_from_ir() const;
    int get_next_class_tag(Symbol class_name);
    int get_tag_for_name(Symbol class_name) const;
    CgenNodeMap get_cgen_node_map() const { return cgen_nodes_for_tag; }

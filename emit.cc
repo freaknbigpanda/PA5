@@ -17,7 +17,7 @@
 //
 //////////////////////////////////////////////////////////////////////////////
 
-void emit_load(char *dest_reg, int offset, char *source_reg, ostream& s)
+void emit_load(const char *dest_reg, int offset, const char *source_reg, ostream& s)
 {
   s << LW << dest_reg << " " << offset * WORD_SIZE << "(" << source_reg << ")"
     << endl;
@@ -45,14 +45,14 @@ void emit_load_bool(const char *dest, const BoolConst& b, ostream& s)
   s << endl;
 }
 
-void emit_load_string(char *dest, StringEntry *str, ostream& s)
+void emit_load_string(const char *dest, StringEntry *str, ostream& s)
 {
   emit_partial_load_address(dest,s);
   str->code_ref(s);
   s << endl;
 }
 
-void emit_load_int(char *dest, IntEntry *i, ostream& s)
+void emit_load_int(const char *dest, IntEntry *i, ostream& s)
 {
   emit_partial_load_address(dest,s);
   i->code_ref(s);
@@ -143,7 +143,7 @@ void emit_label_def(int l, ostream &s)
   s << ":" << endl;
 }
 
-void emit_jump(char *label, ostream &s)
+void emit_jump(const char *label, ostream &s)
 {
   s << JUMP << label << endl;
 }
@@ -155,54 +155,69 @@ void emit_jump(int label, ostream &s)
   s << endl;
 }
 
-void emit_beqz(char *source, int label, ostream &s)
+void emit_beqz(const char *source, int label, ostream &s)
 {
   s << BEQZ << source << " ";
   emit_label_ref(label,s);
   s << endl;
 }
 
-void emit_beq(char *src1, char *src2, int label, ostream &s)
+void emit_beq(const char *src1, const char *src2, int label, ostream &s)
 {
   s << BEQ << src1 << " " << src2 << " ";
   emit_label_ref(label,s);
   s << endl;
 }
 
-void emit_beq(char *src1, char *src2, char* label, ostream &s)
+void emit_beq(const char *src1, const char *src2, const char* label, ostream &s)
 {
   s << BEQ << src1 << " " << src2 << " " << label << endl;
 }
 
-void emit_bne(char *src1, char *src2, int label, ostream &s)
+void emit_bne(const char *src1, const char *src2, const char* label, ostream &s)
+{
+  s << BNE << src1 << " " << src2 << " " << label << endl;
+}
+
+void emit_bne(const char *src1, const char *src2, int label, ostream &s)
 {
   s << BNE << src1 << " " << src2 << " ";
   emit_label_ref(label,s);
   s << endl;
 }
 
-void emit_bleq(char *src1, char *src2, int label, ostream &s)
+void emit_bleq(const char *src1, const char *src2, const char* label, ostream &s)
+{
+  s << BLEQ << src1 << " " << src2 << " " << label << endl;
+}
+
+void emit_bleq(const char *src1, const char *src2, int label, ostream &s)
 {
   s << BLEQ << src1 << " " << src2 << " ";
   emit_label_ref(label,s);
   s << endl;
 }
 
-void emit_blt(char *src1, char *src2, int label, ostream &s)
+void emit_blt(const char *src1, const char *src2, const char* label, ostream &s)
+{
+  s << BLT << src1 << " " << src2 << " " << label << endl;
+}
+
+void emit_blt(const char *src1, const char *src2, int label, ostream &s)
 {
   s << BLT << src1 << " " << src2 << " ";
   emit_label_ref(label,s);
   s << endl;
 }
 
-void emit_blti(char *src1, int imm, int label, ostream &s)
+void emit_blti(const char *src1, int imm, int label, ostream &s)
 {
   s << BLT << src1 << " " << imm << " ";
   emit_label_ref(label,s);
   s << endl;
 }
 
-void emit_bgti(char *src1, int imm, int label, ostream &s)
+void emit_bgti(const char *src1, int imm, int label, ostream &s)
 {
   s << BGT << src1 << " " << imm << " ";
   emit_label_ref(label,s);
@@ -219,7 +234,7 @@ void emit_branch(int l, ostream& s)
 //
 // Push a register on the stack. The stack grows towards smaller addresses.
 //
-void emit_push(char *reg, ostream& str)
+void emit_push(const char *reg, ostream& str)
 {
   emit_store(reg,0,SP,str);
   emit_addiu(SP,SP,-4,str);
@@ -230,14 +245,14 @@ void emit_push(char *reg, ostream& str)
 // Emits code to fetch the integer value of the Integer object pointed
 // to by register source into the register dest
 //
-void emit_fetch_int(char *dest, char *source, ostream& s)
+void emit_fetch_int(const char *dest, const char *source, ostream& s)
 { emit_load(dest, DEFAULT_OBJFIELDS, source, s); }
 
 //
 // Emits code to store the integer value contained in register source
 // into the Integer object pointed to by dest.
 //
-void emit_store_int(char *source, char *dest, ostream& s)
+void emit_store_int(const char *source, const char *dest, ostream& s)
 { emit_store(source, DEFAULT_OBJFIELDS, dest, s); }
 
 
@@ -251,7 +266,7 @@ void emit_test_collector(ostream &s)
   emit_load(ACC,0,SP,s);
 }
 
-void emit_gc_check(char *source, ostream &s)
+void emit_gc_check(const char *source, ostream &s)
 {
   if (source != (char*)A1) emit_move(A1, source, s);
   s << JAL << "_gc_check" << endl;
@@ -312,6 +327,13 @@ std::string get_int_const_ref(IntEntry *i)
   std::stringstream int_ref;
   i->code_ref(int_ref);
   return int_ref.str();
+}
+
+std::string get_init_ref(Symbol sym)
+{
+  std::stringstream init_ref;
+  emit_init_ref(sym, init_ref);
+  return init_ref.str();
 }
 
 std::string get_protobj_ref(Symbol sym)
